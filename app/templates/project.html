@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_macros.html" import pill %}
+{% block content %}
+{% if new %}<div class="success" role="status"><strong>Submitted!</strong> A supervisor will review your project. We'll email you when its status changes.</div>{% endif %}
+<h1>{{ p.title }}</h1>
+<p>Status: <strong>{{ p.status|replace('_',' ')|title }}</strong> · Revision {{ p.revision_no }}</p>
+{% if p.status == 'modifications_requested' %}<div class="notice"><strong>Changes requested:</strong> {{ p.staff_comments }}<p><a class="btn" href="/submit/{{ p.id }}/revise">Update and resubmit</a></p></div>{% endif %}
+{% if p.status == 'rejected' %}<div class="errors"><strong>Not approved:</strong> {{ p.staff_comments }}</div>{% endif %}
+{% if approval %}<div class="success"><strong>Approved — {{ approval.number }}</strong><br>Use this number at <a href="/reserve">/reserve</a>. <a href="/approval/{{ approval.number }}">View / print record</a></div>{% endif %}
+<div class="card"><dl class="kv">
+<dt>Description</dt><dd>{{ p.description }}</dd>
+<dt>Machines</dt><dd>{% for i in p.machine_ids %}{{ machines.get(i, 'Machine #' ~ i) }}{% if not loop.last %}, {% endif %}{% endfor %}</dd>
+<dt>Materials</dt><dd>{{ p.materials or '—' }}</dd><dt>Est. hours</dt><dd>{{ p.estimated_hours|hours }}</dd>
+<dt>Files</dt><dd>{% for f in p.files %}{{ f.original_name }}{% if not loop.last %}, {% endif %}{% else %}none{% endfor %}</dd></dl></div>
+{% if p.revisions|length > 1 %}<h2>Revision history</h2>
+{% for r in p.revisions|reverse %}<div class="card"><strong>Revision {{ r.revision_no }}</strong> · {{ r.created_at|local }}{% if r.staff_comments %}<p>Staff feedback: {{ r.staff_comments }}</p>{% endif %}</div>{% endfor %}{% endif %}
+<p><a href="/my">← My shop</a></p>
+{% endblock %}

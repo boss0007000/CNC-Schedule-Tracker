@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors, csrf %}
+{% block content %}
+<h1>Check in</h1>
+{% if active %}<div class="notice">You're currently checked in to <strong>{{ active.machine.name }}</strong>. <a href="/checkout">Check out</a> when you're done.</div>{% endif %}
+{{ errors(errs) }}
+<form method="post" action="/checkin" class="card" novalidate>
+  {{ csrf() }}
+  <label for="ref">Reservation reference</label>
+  <input id="ref" name="ref" type="text" value="{{ ref }}" list="todays" aria-label="RSV-7K3Q9F" placeholder="RSV-7K3Q9F" autocapitalize="characters" autocomplete="off" required>
+  <datalist id="todays">{% for r in todays %}<option value="{{ r.ref }}">{{ r.machine.name }} {{ r.start_at|localtime }}</option>{% endfor %}</datalist>
+  <p class="help">From your confirmation email.</p>
+  <label for="sc">Shop code</label>
+  <input id="sc" name="shop_code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" required>
+  <p class="help">The 4-digit code shown on the TV in the shop. It changes every 10 minutes.</p>
+  <button class="block" type="submit">Check in</button>
+</form>
+{% endblock %}

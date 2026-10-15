@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Backups</h1>
+{% if msg %}<div class="success">{{ msg }}</div>{% endif %}
+<p>A backup runs automatically every night at 3:15 AM. Destination folder: <code>{{ dest }}</code>{% if put %}; also uploaded to your configured remote (HTTP PUT / WebDAV){% endif %}. The last 14 are kept. On free hosts the disk may be wiped, so configure a remote or sync the folder (see the README).</p>
+<form method="post" action="/admin/backups/run"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Run a backup now</button></form>
+<div class="tablewrap"><table><tr><th>File</th><th>When</th><th class="num">Size</th></tr>
+{% for f in files %}<tr><td><a href="/admin/backups/{{ f.name }}">{{ f.name }}</a></td><td>{{ f.when|local }}</td><td class="num">{{ (f.bytes/1024)|round|int }} KB</td></tr>{% else %}<tr><td colspan="3">No backups yet.</td></tr>{% endfor %}</table></div>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>QR codes</h1>
+<p>These four URLs are permanent, so printed codes never need to change. Print the sheet, laminate it, and post it at the shop entrance and beside the TV. Codes point to <strong>{{ flows[0][3]|replace('/submit','') }}</strong> — if you change <code>BASE_URL</code> they must be reprinted.</p>
+<p class="noprint"><a class="btn" href="/admin/qr/print.pdf" target="_blank">Print-ready sheet (PDF, all four)</a></p>
+<div class="tiles">
+{% for key, label, hint, url in flows %}<div class="card"><h2>{{ loop.index }}. {{ label }}</h2><img src="/qr/{{ key }}.png" alt="QR code for {{ label }}" width="220" height="220"><p>{{ hint }}</p><p class="muted">{{ url }}</p>
+<p class="noprint"><a class="btn small secondary" href="/admin/qr/{{ key }}.png">PNG</a> <a class="btn small secondary" href="/admin/qr/{{ key }}.pdf" target="_blank">Poster PDF</a></p></div>{% endfor %}
+</div>
+{% endblock %}

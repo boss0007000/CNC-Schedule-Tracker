@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors, pill %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<div data-refresh="30"></div>
+<h1>Dashboard</h1>
+{{ errors(errs) }}
+{% if cfg.emergency_active %}
+<div class="errors" role="alert"><strong>EMERGENCY CLOSE ACTIVE.</strong> {{ cfg.emergency_message }}
+{% if staff.role != 'monitor' %}<form method="post" action="/admin/emergency" class="toolbar"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="reopen">
+<div class="check"><input id="rc" type="checkbox" name="confirm"><label for="rc">I confirm it is safe to reopen</label></div><button type="submit">Reopen shop</button></form>{% endif %}</div>
+{% endif %}
+<div class="tiles">
+  <a class="tile" href="/admin/approvals"><strong>{{ pending }}</strong>pending approvals</a>
+  <a class="tile" href="/admin/sessions?show=review"><strong>{{ flagged|length }}</strong>auto-closed / flagged sessions</a>
+  <a class="tile" href="/admin/sessions"><strong>{{ active|length }}</strong>active sessions{% if overdue %} · <span class="pill s-overdue">{{ overdue|length }} overdue</span>{% endif %}</a>
+  <a class="tile" href="/admin/reservations"><strong>{{ todays|length }}</strong>reservations today</a>
+</div>
+<h2>Live machine board</h2>
+<div class="board">
+{% for m, st in board %}<a class="m" href="/admin/machines/{{ m.id }}" class="plain"><strong>{{ m.name }}</strong><br>
+<span class="pill s-{{ st.status }}">{{ st.label }}</span>
+{% if st.current_user %}<br>{{ st.current_user }}{% if st.status == 'in_use' %} · {{ st.remaining_minutes }} min left{% elif st.status == 'overdue' %} · {{ st.overdue_minutes }} min over{% endif %}{% endif %}
+{% if st.next_reservation_start %}<br><span class="muted">Next {{ st.next_reservation_start|localtime }}</span>{% endif %}</a>{% endfor %}
+</div>
+<h2>Active sessions</h2>
+<div class="tablewrap"><table><tr><th>Machine</th><th>Student</th><th>In</th><th>Ends</th><th>State</th></tr>
+{% for s in active %}<tr><td>{{ s.machine.name }}</td><td>{{ s.student.full_name }}</td><td>{{ s.checked_in_at|localtime }}</td><td>{{ s.expected_end_at|localtime }}</td>
+<td>{% if now > s.expected_end_at %}<span class="pill s-overdue">Overdue</span>{% else %}On time{% endif %}</td></tr>{% else %}<tr><td colspan="5">No one is checked in.</td></tr>{% endfor %}</table></div>
+{% if flagged %}<h2>Flagged sessions</h2><div class="tablewrap"><table><tr><th>Machine</th><th>Student</th><th>Date</th><th>Note</th></tr>
+{% for s in flagged %}<tr><td>{{ s.machine.name }}</td><td>{{ s.student.full_name }}</td><td>{{ s.checked_in_at|local }}</td><td>{{ 'Auto-closed (forgot to check out)' if s.auto_closed else 'Needs review' }}</td></tr>{% endfor %}</table></div>{% endif %}
+<h2>Today's reservations</h2>
+<div class="tablewrap"><table><tr><th>Time</th><th>Machine</th><th>Student</th><th>Ref</th><th>Status</th></tr>
+{% for r in todays %}<tr><td>{{ r.start_at|localtime }}–{{ r.end_at|localtime }}</td><td>{{ r.machine.name }}</td><td>{{ r.student.full_name }}</td><td>{{ r.ref }}</td><td>{{ r.status|replace('_',' ') }}</td></tr>{% else %}<tr><td colspan="5">None today.</td></tr>{% endfor %}</table></div>
+{% if staff.role != 'monitor' and not cfg.emergency_active %}
+<h2>Emergency</h2>
+<form method="post" action="/admin/emergency" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="close">
+<p>Closes every machine, shows a red banner on the TV and emails everyone currently checked in.</p>
+<label for="em">Message for the TV</label><input id="em" name="message" type="text" value="{{ cfg.emergency_message }}">
+<label for="ec">Type CLOSE to confirm</label><input id="ec" name="confirm" type="text" autocomplete="off" required>
+<button class="block danger" type="submit">Emergency close</button></form>{% endif %}
+{% endblock %}

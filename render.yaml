@@ -1,0 +1,34 @@
+# Render Blueprint: one free Docker web service. Database = Neon free Postgres (create it separately, paste the URL).
+services:
+  - type: web
+    name: machine-shop
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: ENV
+        value: prod
+      - key: DATABASE_URL
+        sync: false          # Neon connection string (add ?sslmode=require)
+      - key: SECRET_KEY
+        generateValue: true
+      - key: BASE_URL
+        sync: false          # https://machine-shop.onrender.com (or your custom domain)
+      - key: FORCE_HTTPS
+        value: "true"
+      - key: STORAGE_BACKEND
+        value: db            # free web services have an ephemeral disk
+      - key: EMAIL_PROVIDER
+        value: brevo
+      - key: BREVO_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false          # a sender address you verified in Brevo
+      - key: STAFF_NOTIFY_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_USERNAME
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: BACKUP_PUT_URL
+        sync: false          # optional WebDAV/HTTP PUT destination

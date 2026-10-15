@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors, csrf %}
+{% block content %}
+<h1>Enter your code</h1>
+<p>We sent a 6-digit code to <strong>{{ email }}</strong>. It expires in 10 minutes. Check spam if you don't see it.</p>
+{{ errors(errs) }}
+<form method="post" action="/verify/code" class="card" novalidate>
+  {{ csrf() }}
+  <input type="hidden" name="next" value="{{ next }}">
+  <input type="hidden" name="email" value="{{ email }}">
+  <label for="f_code">6-digit code</label>
+  <input id="f_code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" required autofocus>
+  <button class="block" type="submit">Verify</button>
+</form>
+<form method="post" action="/verify/resend">
+  {{ csrf() }}
+  <input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="email" value="{{ email }}">
+  <button class="secondary" type="submit">Send a new code</button>
+</form>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors, csrf %}
+{% block content %}
+<h1>Reserve a machine</h1>
+<p class="muted">Signed in as {{ student.full_name }}. You need an approved project and a current certification for the machine.</p>
+{{ errors(errs) }}
+<form method="get" action="/reserve" class="card">
+  <label for="ap">Approval number</label>
+  <input id="ap" name="approval" type="text" list="aplist" value="{{ approval }}" aria-label="APR-2026-0042" placeholder="APR-2026-0042" autocapitalize="characters" autocomplete="off" required>
+  <datalist id="aplist">{% for a in approvals %}<option value="{{ a.number }}">{{ a.project.title }}</option>{% endfor %}</datalist>
+  {% if not approvals %}<p class="help">You have no approvals yet. <a href="/submit">Submit a project</a> first.</p>{% endif %}
+  <label for="mc">Machine</label>
+  <select id="mc" name="machine" required><option value="">Choose…</option>
+    {% for m in machines %}<option value="{{ m.id }}" {% if machine_id == m.id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select>
+  <label for="dt">Date</label>
+  <input id="dt" name="date" type="date" value="{{ day }}" min="{{ today }}" max="{{ last_day }}" required>
+  <p class="help">You can book up to {{ cfg.max_advance_days }} days ahead.</p>
+  <button class="block" type="submit">Show available times</button>
+</form>
+{% if result %}
+  {% if result.error %}<div class="errors" role="alert">{{ result.error }}</div>{% endif %}
+  {% if result.slots %}
+  <form method="post" action="/reserve" class="card">
+    {{ csrf() }}
+    <input type="hidden" name="approval" value="{{ approval }}"><input type="hidden" name="machine_id" value="{{ machine_id }}">
+    <fieldset class="slots-set"><legend>Available times ({{ tz }})</legend>
+      <div class="slots">
+      {% for s in result.slots %}<label><input type="radio" name="start" value="{{ s.start.isoformat() }}" required><span>{{ s.start|localtime }}{% if s.state == 'taken' %}<br><small>Booked · waitlist</small>{% endif %}</span></label>{% endfor %}
+      </div>
+    </fieldset>
+    <label for="ns">How many consecutive slots?</label>
+    <select id="ns" name="nslots">{% for i in range(1, cfg.max_reservation_slots + 1) %}<option value="{{ i }}" {% if nslots == i %}selected{% endif %}>{{ i }} × {{ cfg.slot_minutes }} min</option>{% endfor %}</select>
+    {% if result.needs_waiver %}
+    <fieldset><legend>Safety waiver</legend><p>{{ cfg.waiver_text }}</p>
+      <div class="check"><input id="aw" type="checkbox" name="accept_waiver" required><label for="aw">I have read and accept the safety waiver.</label></div></fieldset>
+    {% endif %}
+    <button class="block" type="submit" name="action" value="book">Reserve selected time</button>
+    {% if result.slots|selectattr('state', 'equalto', 'taken')|list %}<button class="block secondary" type="submit" name="action" value="waitlist">Join waiting list for selected (booked) time</button>{% endif %}
+  </form>
+  {% endif %}
+{% endif %}
+{% endblock %}

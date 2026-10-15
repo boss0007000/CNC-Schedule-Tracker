@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors, csrf %}
+{% block content %}
+<h1>Check out</h1>
+{{ errors(errs) }}
+{% if not s %}<div class="notice">You don't have an active session. If you just checked out, you're all done — thank you!</div>
+{% else %}
+<p>Checking out of <strong>{{ s.machine.name }}</strong> (in since {{ s.checked_in_at|localtime }}).</p>
+<form method="post" action="/checkout" enctype="multipart/form-data" class="card" novalidate>
+  {{ csrf() }}
+  <fieldset><legend>Cleanup checklist (required)</legend>
+    {% for key, label in items %}<div class="check"><input id="{{ key }}" type="checkbox" name="{{ key }}" {% if v.get(key) %}checked{% endif %}><label for="{{ key }}">{{ label }}</label></div>{% endfor %}
+  </fieldset>
+  <label for="sc">Shop code</label>
+  <input id="sc" name="shop_code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" required>
+  <p class="help">The 4-digit code shown on the TV.</p>
+  <fieldset><legend>Report a problem (optional)</legend>
+    <label for="rk">Type</label>
+    <select id="rk" name="report_kind"><option value="">No problem</option><option value="damage" {% if v.get('report_kind')=='damage' %}selected{% endif %}>Damage — needs inspection</option><option value="maintenance" {% if v.get('report_kind')=='maintenance' %}selected{% endif %}>Machine broken — needs maintenance</option></select>
+    <label for="rt">What happened?</label><textarea id="rt" name="report_text">{{ v.get('report_text', '') }}</textarea>
+    <label for="ph">Photo</label><input id="ph" type="file" name="photo" accept="image/png,image/jpeg,image/webp" capture="environment">
+  </fieldset>
+  <button class="block" type="submit">Check out</button>
+</form>
+{% endif %}
+{% endblock %}

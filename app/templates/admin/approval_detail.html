@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<h1>{{ p.title }}</h1>
+{{ errors(errs) }}
+<p>Status: <strong>{{ p.status|replace('_',' ')|title }}</strong> · Revision {{ p.revision_no }} · {{ p.student.full_name }} ({{ p.student.email }}, {{ p.student.standing }}{% if p.student.course %}, {{ p.student.course }}{% endif %})</p>
+<div class="grid2">
+<div class="card"><h2>Submission</h2><dl class="kv">
+<dt>Description</dt><dd>{{ p.description }}</dd>
+<dt>Machines</dt><dd>{% for i in p.machine_ids %}{{ names.get(i, i) }}{% if not loop.last %}, {% endif %}{% endfor %}</dd>
+<dt>Materials</dt><dd>{{ p.materials or '—' }}</dd><dt>Est. hours</dt><dd>{{ p.estimated_hours|hours }}</dd>
+<dt>Course / instructor</dt><dd>{{ p.course or '—' }} / {{ p.instructor or '—' }}</dd></dl>
+<h2>Files</h2>
+<ul>{% for f in p.files %}<li><a href="{{ file_link('project', f.id) }}" target="_blank" rel="noopener">{{ f.original_name }}</a> <span class="muted">(rev {{ f.revision_no }}, {{ (f.size/1024)|round|int }} KB, scan: {{ f.scan_status }})</span></li>{% else %}<li>No files.</li>{% endfor %}</ul>
+<h2>Revision history</h2>
+{% for r in p.revisions|reverse %}<p><strong>Rev {{ r.revision_no }}</strong> · {{ r.created_at|local }}{% if r.staff_comments %}<br>Feedback: {{ r.staff_comments }}{% endif %}</p>{% endfor %}
+</div>
+<div>
+{% for a in approvals %}<div class="success"><strong>{{ a.number }}</strong> ({{ a.status }}) · expires {{ a.expires_at|localdate }} · <a href="/admin/approval-records/{{ a.id }}">print record</a>
+{% if a.status == 'active' %}<form class="inline" method="post" action="/admin/approvals/{{ a.id }}/revoke" data-confirm="Revoke this approval? Existing reservations are not cancelled automatically."><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input name="reason" aria-label="Reason" placeholder="Reason" required class="sm w10"><button class="small danger">Revoke</button></form>{% endif %}</div>{% endfor %}
+{% if p.status in ('submitted', 'modifications_requested') and staff.role != 'monitor' %}
+<form method="post" action="/admin/approvals/{{ p.id }}/decide" class="card"><h2>Approve</h2>
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="approve">
+<fieldset><legend>Covered machines</legend>{% for m in machines %}<div class="check"><input type="checkbox" id="am{{ m.id }}" name="machine_ids" value="{{ m.id }}" {% if m.id in p.machine_ids %}checked{% endif %}><label for="am{{ m.id }}">{{ m.name }}</label></div>{% endfor %}</fieldset>
+<label for="mh">Max total hours</label><input id="mh" name="max_total_hours" type="number" step="0.5" min="0.5" value="{{ p.estimated_hours|hours }}">
+<label for="ms">Max sessions (blank = unlimited)</label><input id="ms" name="max_sessions" type="number" min="1">
+<label for="ex">Expires on</label><input id="ex" name="expires_on" type="date" value="{{ default_expiry }}">
+<label for="rs">Material restrictions (one per line)</label><textarea id="rs" name="restrictions"></textarea>
+<label for="cd">Conditions</label><textarea id="cd" name="conditions"></textarea>
+<label for="cm">Comments to student</label><textarea id="cm" name="comments"></textarea>
+<button class="block" type="submit">Approve and email student</button></form>
+<form method="post" action="/admin/approvals/{{ p.id }}/decide" class="card"><h2>Request modifications</h2>
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="changes">
+<label for="cc">What needs to change?</label><textarea id="cc" name="comments" required></textarea>
+<button class="block secondary" type="submit">Send back to student</button></form>
+<form method="post" action="/admin/approvals/{{ p.id }}/decide" class="card" data-confirm="Reject this project?"><h2>Reject</h2>
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="reject">
+<label for="rr">Reason (shown to student)</label><textarea id="rr" name="reason" required></textarea>
+<button class="block danger" type="submit">Reject</button></form>
+{% endif %}
+</div></div>
+{% endblock %}

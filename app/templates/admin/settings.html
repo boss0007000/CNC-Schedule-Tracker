@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<h1>Shop settings</h1>
+{{ errors(errs) }}{% if msg %}<div class="notice" role="status">{{ msg }}</div>{% endif %}
+<p><a href="/admin/users">Staff users</a> · <a href="/admin/audit">Audit log</a> · <a href="/admin/backups">Backups</a> · <a href="/admin/qr">QR codes</a></p>
+
+<h2>Weekly hours</h2>
+<form method="post" action="/admin/settings/hours" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="tablewrap"><table><tr><th>Day</th><th>Opens</th><th>Closes</th><th>Closed</th></tr>
+{% for d in weekdays %}{% set h = hours.get(loop.index0) %}<tr><td>{{ d }}</td>
+<td><input class="sm" type="time" name="open_{{ loop.index0 }}" value="{{ h.open_time.strftime('%H:%M') if h and h.open_time else '' }}" aria-label="{{ d }} opens"></td>
+<td><input class="sm" type="time" name="close_{{ loop.index0 }}" value="{{ h.close_time.strftime('%H:%M') if h and h.close_time else '' }}" aria-label="{{ d }} closes"></td>
+<td><input type="checkbox" name="closed_{{ loop.index0 }}" {% if not h or h.closed %}checked{% endif %} aria-label="{{ d }} closed"></td></tr>{% endfor %}</table></div>
+<p class="help">Times are {{ cfg.get('tz', 'local shop time') }} (America/Los_Angeles unless configured otherwise).</p>
+<button type="submit">Save hours</button></form>
+
+<h2>Holidays and special hours</h2>
+<div class="tablewrap"><table><tr><th>Date</th><th>Hours</th><th>Label</th><th></th></tr>
+{% for e in exceptions %}<tr><td>{{ e.on_date }}</td><td>{{ 'Closed' if e.closed else (e.open_time.strftime('%H:%M') ~ '–' ~ e.close_time.strftime('%H:%M')) }}</td><td>{{ e.label or '' }}</td>
+<td><form class="inline" method="post" action="/admin/settings/exceptions/{{ e.id }}/delete"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small danger">Remove</button></form></td></tr>{% else %}<tr><td colspan="4">None.</td></tr>{% endfor %}</table></div>
+<form method="post" action="/admin/settings/exceptions" class="card toolbar"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div><label for="xd">Date</label><input id="xd" type="date" name="date" required></div><div><label for="xl">Label</label><input id="xl" name="label" aria-label="Thanksgiving" placeholder="Thanksgiving"></div>
+<div><label for="xo">Opens</label><input id="xo" type="time" name="open_time"></div><div><label for="xc">Closes</label><input id="xc" type="time" name="close_time"></div>
+<div class="check"><input id="xx" type="checkbox" name="closed" checked><label for="xx">Closed all day</label></div><button>Add</button></form>
+
+<h2>Supervisor shifts</h2>
+<div class="tablewrap"><table><tr><th>Supervisor</th><th>Start</th><th>End</th><th></th></tr>
+{% for s in shifts %}<tr><td>{{ s.staff.display_name }}</td><td>{{ s.start_at|local }}</td><td>{{ s.end_at|local }}</td><td><form class="inline" method="post" action="/admin/settings/shifts/{{ s.id }}/delete"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small danger">Remove</button></form></td></tr>{% else %}<tr><td colspan="4">No upcoming shifts. Machines that need a supervisor can't be booked until shifts exist.</td></tr>{% endfor %}</table></div>
+<form method="post" action="/admin/settings/shifts" class="card toolbar"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div><label for="sp">Supervisor</label><select id="sp" name="staff_id">{% for u in staff %}<option value="{{ u.id }}">{{ u.display_name }}</option>{% endfor %}</select></div>
+<div><label for="ss">Start</label><input id="ss" type="datetime-local" name="start" required></div><div><label for="se">End</label><input id="se" type="datetime-local" name="end" required></div>
+<div><label for="sw">Repeat weekly for</label><input id="sw" type="number" name="repeat_weeks" min="0" max="26" value="0"></div><button>Add shift</button></form>
+
+<h2>Rules and limits</h2>
+<form method="post" action="/admin/settings" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+{% for key, kind, label in meta %}
+{% if kind == 'bool' %}<div class="check"><input id="s_{{ key }}" type="checkbox" name="{{ key }}" {% if cfg.get(key) %}checked{% endif %}><label for="s_{{ key }}">{{ label }}</label></div>
+{% elif kind == 'text' %}<label for="s_{{ key }}">{{ label }}</label><textarea id="s_{{ key }}" name="{{ key }}">{{ cfg.get(key) }}</textarea>
+{% elif key == 'allowed_email_domain' %}<label for="s_{{ key }}">{{ label }}</label><input id="s_{{ key }}" name="{{ key }}" value="{{ cfg.get(key) or '' }}" aria-label="{{ email_domain }}" placeholder="{{ email_domain }}"><p class="help">Currently {{ email_domain }}. Leave blank to use the server default.</p>
+{% else %}<label for="s_{{ key }}">{{ label }}</label><input id="s_{{ key }}" name="{{ key }}" value="{{ cfg.get(key) }}" {% if kind in ('int','float') %}type="number" step="any" inputmode="decimal"{% endif %}>{% endif %}
+{% endfor %}
+<button class="block" type="submit">Save settings</button></form>
+
+<h2>Data retention</h2>
+<form method="post" action="/admin/settings/purge" class="card">
+<p>Delete personal records (sessions, reservations, projects, files, inactive students) older than the retention period. The audit log is kept. Preview first; nothing is deleted until you type PURGE.</p>
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label for="pd">Older than (days, minimum 30)</label><input id="pd" type="number" name="days" min="30" value="{{ cfg.retention_days }}">
+<div class="check"><input id="pi" type="checkbox" name="incidents"><label for="pi">Also purge safety incident reports</label></div>
+<label for="pc">Type PURGE to delete (leave blank to preview)</label><input id="pc" name="confirm" autocomplete="off">
+<button class="danger" type="submit">Preview / purge</button></form>
+{% if purge_counts is defined %}<div class="card"><strong>{{ 'Preview' if purge_dry else 'Deleted' }} (older than {{ purge_days }} days):</strong><ul>{% for k, v in purge_counts.items() %}<li>{{ k }}: {{ v }}</li>{% endfor %}</ul></div>{% endif %}
+{% endblock %}

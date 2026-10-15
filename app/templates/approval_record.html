@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Approval record {{ a.number }}</h1>
+{% if a.status == 'revoked' %}<div class="errors">This approval has been revoked.</div>{% endif %}
+<div class="card"><pre class="prewrap">{{ text }}</pre></div>
+<p class="noprint"><a class="btn" href="{{ pdf }}">Download PDF</a> <button class="secondary" type="button" data-print>Print</button></p>
+{% endblock %}

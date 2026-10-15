@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="success" role="status"><strong>You're checked in</strong> to the {{ s.machine.name }} at {{ s.checked_in_at|localtime }}.</div>
+<p>Your time ends at <strong>{{ s.expected_end_at|localtime }}</strong>. When you finish, scan the Check out code and complete the cleanup checklist. Sessions not closed shortly after the end time are closed automatically and flagged.</p>
+<p><a class="btn" href="/checkout">Check out</a></p>
+{% endblock %}

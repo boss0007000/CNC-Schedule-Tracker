@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors %}
+{% block content %}
+<h1>Staff login</h1>
+{{ errors(errs) }}
+<form method="post" action="/admin/login" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <label for="u">Username</label><input id="u" name="username" type="text" autocomplete="username" required autofocus>
+  <label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required>
+  <button class="block" type="submit">Log in</button>
+</form>
+{% endblock %}

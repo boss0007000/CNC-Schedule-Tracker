@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors, csrf %}
+{% block content %}
+{% if new %}<div class="success" role="status"><strong>Reservation confirmed.</strong> We emailed you the details and a cancel link.</div>{% endif %}
+{{ errors(errs) }}
+<h1>Reservation {{ r.ref }}</h1>
+<div class="card"><dl class="kv">
+<dt>Machine</dt><dd>{{ r.machine.name }}</dd><dt>Start</dt><dd>{{ r.start_at|local }}</dd><dt>End</dt><dd>{{ r.end_at|local }}</dd>
+<dt>Status</dt><dd>{{ r.status|replace('_',' ')|title }}</dd></dl></div>
+{% if r.status == 'confirmed' %}<p>To check in, go to <a href="/checkin">/checkin</a> with this reference and the code shown on the shop TV.</p>{% endif %}
+{% if can_cancel %}
+<form method="post" action="/reservation/{{ r.ref }}/cancel" data-confirm="Cancel this reservation?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="t" value="{{ t }}">
+  <button class="danger" type="submit">Cancel reservation</button></form>
+{% elif r.status == 'confirmed' %}<p class="muted">Cancellation closes {{ cfg.cancel_cutoff_minutes }} minutes before start. Contact staff for changes.</p>{% endif %}
+{% if owner and r.status in ('confirmed','checked_in') %}
+<form method="post" action="/reservation/{{ r.ref }}/extend"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button class="secondary" type="submit">Extend by one slot (if free)</button></form>{% endif %}
+{% endblock %}

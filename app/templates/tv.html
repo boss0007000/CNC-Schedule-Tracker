@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shop Status</title>
+<link rel="stylesheet" href="/static/tv.css">
+</head>
+<body>
+<div id="emergency" class="emergency" role="alert" hidden><div><div class="warn">&#9888;</div><h1>SHOP CLOSED &mdash; EMERGENCY</h1><p id="emergency-msg"></p></div></div>
+<div id="conn" class="conn" role="status" hidden></div>
+<div id="drift" class="drift">
+  <header class="top">
+    <div class="brand">
+      <div class="eyebrow">Advanced Manufacturing Lab</div>
+      <h1 id="shop-name">Machine Shop</h1>
+      <div class="meta"><span id="open-state" class="open"></span><span class="sep"></span><span>Supervisor <b id="supervisor">&mdash;</b></span></div>
+    </div>
+    <div class="clock"><div id="time" class="time">--:--</div><div id="date" class="date"></div></div>
+    <div class="code"><span class="k">Shop code</span><span id="code" class="big">&middot;&middot;&middot;&middot;</span><span id="code-left" class="k2"></span></div>
+  </header>
+  <section class="summary" id="summary" aria-label="Summary"></section>
+  <main id="grid" class="grid" aria-live="off"></main>
+  <div class="legend" aria-hidden="true">
+    <span><i class="lg inuse"></i>In use</span><span><i class="lg booked"></i>Booked</span><span><i class="lg done"></i>Used earlier</span>
+    <span><i class="lg overdue"></i>Overdue</span><span><i class="lg down"></i>Out of service</span><span><i class="lg free"></i>Free</span>
+  </div>
+  <footer class="qrs" id="qrs"></footer>
+</div>
+<script src="/static/tv.js"></script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+"""All outbound email content in one place. Every function only *queues* into the outbox."""
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app import clock, emailer, security
+from app.config import get_config
+from app.models import Approval, Project, Reservation, StaffUser, Student
+from app.services import settings as shop_settings
+
+
+def _shop(db) -> str:
+    return shop_settings.load(db).shop_name
+
+
+def _fmt(dt) -> str:
+    return clock.to_local(dt).strftime("%A %b %d, %I:%M %p").replace(" 0", " ")
+
+
+def staff_recipients(db: Session) -> list[str]:
+    cfg = get_config()
+    if cfg.staff_notify_email:
+        return [e.strip() for e in cfg.staff_notify_email.split(",") if e.strip()]
+    rows = db.scalars(select(StaffUser).where(StaffUser.active.is_(True), StaffUser.email.is_not(None),
+                                              StaffUser.role.in_(["admin", "supervisor"])))
+    return [u.email for u in rows if u.email]
+
+
+def to_staff(db: Session, subject: str, text: str) -> None:
+    for to in staff_recipients(db):
+        emailer.queue(db, to, subject, text)
+
+
+def approval_text(a: Approval) -> str:
+    lines = [
+        f"APPROVAL RECORD  {a.number}",
+        f"Student: {a.student.full_name} <{a.student.email}>",
+        f"Project: {a.project.title}",
+        f"Approved by: {a.approved_by} on {clock.to_local(a.approved_at).strftime('%b %d, %Y')}",
+        f"Valid until: {clock.to_local(a.expires_at).strftime('%b %d, %Y') if a.expires_at else 'no expiry'}",
+        "Covered machines: " + ", ".join(_machine_names(a)),
+        f"Max total hours: {a.max_total_hours:g}" if a.max_total_hours else "Max total hours: unlimited",
+        f"Max sessions: {a.max_sessions}" if a.max_sessions else "Max sessions: unlimited",
+    ]
+    if a.restrictions:
+        lines.append("Restrictions:")
+        lines += [f"  - {r.value}" for r in a.restrictions]
+    if a.conditions:
+        lines.append(f"Conditions: {a.conditions}")
+    if a.comments:
+        lines.append(f"Staff comments: {a.comments}")
+    return "\n".join(lines)
+
+
+def _machine_names(a: Approval) -> list[str]:
+    from sqlalchemy.orm import object_session
+
+    from app.models import Machine
+    s = object_session(a)
+    return [m.name for m in s.scalars(select(Machine).where(Machine.id.in_(a.machine_ids)).order_by(Machine.name))]
+
+
+def approval_link(a: Approval) -> str:
+    tok = security.sign("approval-view", {"n": a.number})
+    return f"{get_config().base_url}/approval/{a.number}?t={tok}"
+
+
+# --- projects ------------------------------------------------------------------------------
+def project_submitted(db: Session, p: Project, revised: bool = False) -> None:
+    emailer.queue(db, p.student.email, f"We received your project: {p.title}",
+                  f"Hi {p.student.first_name},\n\nWe received {'your updated ' if revised else ''}project "
+                  f"“{p.title}” and a supervisor will review it. You'll get an email when its status changes.\n\n"
+                  f"— {_shop(db)}")
+    to_staff(db, f"New {'resubmission' if revised else 'project submission'}: {p.title}",
+             f"{p.student.full_name} ({p.student.email}) submitted “{p.title}”.\n"
+             f"Review it: {get_config().base_url}/admin/approvals/{p.id}")
+
+
+def project_approved(db: Session, a: Approval) -> None:
+    emailer.queue(db, a.student.email, f"Project approved: {a.number}",
+                  f"Hi {a.student.first_name},\n\nGreat news — “{a.project.title}” is approved.\n\n"
+                  f"{approval_text(a)}\n\nYou will need this approval number to reserve machines at "
+                  f"{get_config().base_url}/reserve\nPrintable record: {approval_link(a)}\n\n— {_shop(db)}")
+
+
+def project_rejected(db: Session, p: Project, reason: str) -> None:
+    emailer.queue(db, p.student.email, f"Project not approved: {p.title}",
+                  f"Hi {p.student.first_name},\n\n“{p.title}” was not approved.\n\nReason: {reason}\n\n"
+                  f"You are welcome to submit a new project at {get_config().base_url}/submit\n\n— {_shop(db)}")
+
+
+def project_changes(db: Session, p: Project, comments: str) -> None:
+    emailer.queue(db, p.student.email, f"Changes requested: {p.title}",
+                  f"Hi {p.student.first_name},\n\nA supervisor asked for changes to “{p.title}”:\n\n{comments}\n\n"
+                  f"Update and resubmit here: {get_config().base_url}/submit/{p.id}/revise\n\n— {_shop(db)}")
+
+
+# --- reservations ------------------------------------------------------------------------------
+def cancel_link(r: Reservation) -> str:
+    tok = security.sign("res-cancel", {"ref": r.ref})
+    return f"{get_config().base_url}/reservation/{r.ref}?t={tok}"
+
+
+def reservation_confirmed(db: Session, r: Reservation, extended: bool = False) -> None:
+    emailer.queue(db, r.student.email, f"Reservation {'updated' if extended else 'confirmed'}: {r.machine.name} {r.ref}",
+                  f"Hi {r.student.first_name},\n\nYour reservation is {'extended' if extended else 'confirmed'}.\n\n"
+                  f"Reference: {r.ref}\nMachine: {r.machine.name}\nStart: {_fmt(r.start_at)}\nEnd: {_fmt(r.end_at)}\n\n"
+                  f"Keep the reference handy: you need it, plus the shop code on the TV, to check in "
+                  f"({get_config().base_url}/checkin). Late by more than the grace period counts as a no-show.\n\n"
+                  f"Need to cancel? {cancel_link(r)}\n\n— {_shop(db)}")
+
+
+def reservation_cancelled(db: Session, r: Reservation, by_staff: bool = False, reason: str = "") -> None:
+    emailer.queue(db, r.student.email, f"Reservation cancelled: {r.ref}",
+                  f"Hi {r.student.first_name},\n\nYour reservation {r.ref} for {r.machine.name} on {_fmt(r.start_at)} "
+                  f"was cancelled{' by shop staff' if by_staff else ''}.{(' Reason: ' + reason) if reason else ''}\n\n— {_shop(db)}")
+
+
+def waitlist_offer(db: Session, student: Student, machine_name: str, start, end, token: str, minutes: int) -> None:
+    emailer.queue(db, student.email, f"A slot opened up: {machine_name}",
+                  f"Hi {student.first_name},\n\nThe {machine_name} slot you waited for ({_fmt(start)} – {_fmt(end)}) "
+                  f"is now free. Claim it within {minutes} minutes or it goes to the next student:\n\n"
+                  f"{get_config().base_url}/waitlist/claim/{token}\n\n— {_shop(db)}")
+
+
+def no_show(db: Session, r: Reservation, suspended_until=None) -> None:
+    extra = (f"\n\nBecause of repeated no-shows your booking privileges are paused until {_fmt(suspended_until)}. "
+             f"Contact shop staff if you think this is a mistake.") if suspended_until else ""
+    emailer.queue(db, r.student.email, f"No-show recorded: {r.ref}",
+                  f"Hi {r.student.first_name},\n\nYou didn't check in for {r.machine.name} ({_fmt(r.start_at)}), so the slot "
+                  f"was released for others.{extra}\n\n— {_shop(db)}")
+
+
+def overdue_warning(db: Session, s) -> None:
+    emailer.queue(db, s.student.email, f"Your {s.machine.name} time is up",
+                  f"Hi {s.student.first_name},\n\nYour reservation for {s.machine.name} ended at {_fmt(s.expected_end_at)}. "
+                  f"Please wrap up and check out at {get_config().base_url}/checkout. Sessions that are not closed will be "
+                  f"closed automatically and flagged for staff.\n\n— {_shop(db)}")
+
+
+def auto_closed(db: Session, s) -> None:
+    emailer.queue(db, s.student.email, f"Your {s.machine.name} session was auto-closed",
+                  f"Hi {s.student.first_name},\n\nYou didn't check out of {s.machine.name}, so we closed the session "
+                  f"automatically and flagged it for staff review. Please remember to check out next time.\n\n— {_shop(db)}")
+
+
+def emergency(db: Session, to: str, message: str) -> None:
+    emailer.queue(db, to, "EMERGENCY: shop closed", f"{message}\n\nStop all machines and follow staff instructions.")

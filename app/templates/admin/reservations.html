@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<h1>Reservations</h1>
+{% if msg %}<div class="notice" role="status">{{ msg }}</div>{% endif %}
+<form class="toolbar" method="get">
+  <div><label for="v">View</label><select id="v" name="view"><option value="list" {% if view=='list' %}selected{% endif %}>List (7 days)</option><option value="calendar" {% if view=='calendar' %}selected{% endif %}>Calendar (day)</option></select></div>
+  <div><label for="d">Date</label><input id="d" type="date" name="date" value="{{ day }}"></div>
+  <div><label for="mc">Machine</label><select id="mc" name="machine"><option value="0">All</option>{% for m in machines %}<option value="{{ m.id }}" {% if machine==m.id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></div>
+  <div><label for="st">Status</label><select id="st" name="status"><option value="">Any</option>{% for s in ['confirmed','checked_in','completed','cancelled','no_show'] %}<option {% if status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+  <div><label for="q">Search</label><input id="q" type="search" name="q" value="{{ q }}"></div>
+  <button type="submit">Apply</button>
+</form>
+{% if conflicts %}<div class="errors"><strong>{{ conflicts|length }} conflict(s):</strong> overlapping bookings on the same machine. Cancel or move one:
+<ul>{% for a, b in conflicts %}<li>{{ a.machine.name }}: {{ a.ref }} ({{ a.student.full_name }}, {{ a.start_at|local }}) overlaps {{ b.ref }} ({{ b.student.full_name }}, {{ b.start_at|local }})</li>{% endfor %}</ul></div>{% endif %}
+{% if view == 'calendar' %}
+<p><a href="?view=calendar&date={{ prev }}">← Prev day</a> · <strong>{{ day.strftime('%A %b %d, %Y') }}</strong> · <a href="?view=calendar&date={{ next }}">Next day →</a></p>
+<div class="tablewrap"><table><tr><th>Time</th>{% for m in machines %}<th>{{ m.name }}</th>{% endfor %}</tr>
+{% for s, e in grid %}<tr><th>{{ s|localtime }}</th>{% for m in machines %}{% set r = cell.get((m.id, s)) %}<td>{% if r %}<strong>{{ r.student.public_name }}</strong><br><span class="muted">{{ r.ref }} · {{ r.status|replace('_',' ') }}</span>{% endif %}</td>{% endfor %}</tr>
+{% else %}<tr><td colspan="{{ machines|length + 1 }}">Shop closed.</td></tr>{% endfor %}</table></div>
+{% else %}
+<div class="tablewrap"><table><tr><th>When</th><th>Machine</th><th>Student</th><th>Ref</th><th>Status</th><th>Actions</th></tr>
+{% for r in rows %}<tr><td>{{ r.start_at|local }} – {{ r.end_at|localtime }}</td><td>{{ r.machine.name }}</td><td>{{ r.student.full_name }}<br><span class="muted">{{ r.student.email }}</span></td><td>{{ r.ref }}{% if r.manual %} <span class="muted">(manual)</span>{% endif %}</td><td>{{ r.status|replace('_',' ') }}</td>
+<td>{% if r.status == 'confirmed' and staff.role != 'monitor' %}
+<form class="inline" method="post" action="/admin/reservations/{{ r.id }}/cancel" data-confirm="Cancel and email the student?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small danger">Cancel</button></form>
+<form class="inline" method="post" action="/admin/reservations/{{ r.id }}/release" data-confirm="Release this slot silently?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary">Release</button></form>
+<form class="inline" method="post" action="/admin/reservations/{{ r.id }}/noshow" data-confirm="Mark as no-show?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary">No-show</button></form>
+<form class="inline" method="post" action="/admin/reservations/{{ r.id }}/checkin"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input name="reason" aria-label="Reason to force check-in" placeholder="Reason to force check-in" required class="sm w11"><button class="small">Force check-in</button></form>
+<details><summary>Edit</summary><form method="post" action="/admin/reservations/{{ r.id }}/move"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>Machine<select name="machine_id">{% for m in machines %}<option value="{{ m.id }}" {% if m.id == r.machine_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
+<label>Start<input type="datetime-local" name="start" value="{{ r.start_at|localinput }}"></label><label>End<input type="datetime-local" name="end" value="{{ r.end_at|localinput }}"></label><button class="small">Save</button></form></details>
+{% endif %}</td></tr>{% else %}<tr><td colspan="6">No reservations.</td></tr>{% endfor %}</table></div>
+{% endif %}
+{% if staff.role != 'monitor' %}
+<h2>Create a reservation</h2>
+<form method="post" action="/admin/reservations/new" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label for="ne">Student email</label><input id="ne" name="email" type="email" required>
+<label for="nm">Machine</label><select id="nm" name="machine_id">{% for m in machines %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select>
+<label for="ns">Start</label><input id="ns" name="start" type="datetime-local" required>
+<label for="nh">Hours</label><input id="nh" name="hours" type="number" step="1" min="1" value="1">
+<label for="na">Approval number</label><input id="na" name="approval">
+<div class="check"><input id="no" type="checkbox" name="override"><label for="no">Ignore approval, certification and fairness rules (audited)</label></div>
+<label for="nr">Reason (required when ignoring rules)</label><input id="nr" name="reason">
+<button class="block" type="submit">Create</button></form>{% endif %}
+{% endblock %}

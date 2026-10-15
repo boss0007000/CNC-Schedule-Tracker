@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<h1>{{ m.name }}</h1>
+{% if msg %}<div class="notice" role="status">{{ msg }}</div>{% endif %}
+<p>Status now: <span class="pill s-{{ state.status }}">{{ state.label }}</span>{% if state.reason %} — {{ state.reason }}{% endif %} · maintenance flag: <strong>{{ m.maintenance_state|replace('_',' ') }}</strong>{% if m.override_status %} · manual override by {{ m.override_by }}{% endif %}</p>
+{% if staff.role != 'monitor' %}
+<div class="grid2">
+<form method="post" action="/admin/machines/{{ m.id }}/override" class="card"><h2>Manual status override</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label for="os">Force status</label><select id="os" name="status"><option value="">(none: derive automatically)</option>{% for s in statuses %}<option value="{{ s }}" {% if m.override_status == s %}selected{% endif %}>{{ s|replace('_',' ')|title }}</option>{% endfor %}</select>
+<label for="or">Reason</label><input id="or" name="reason" value="{{ m.override_reason or '' }}"><button class="block">Apply</button></form>
+<form method="post" action="/admin/machines/{{ m.id }}/maintenance" class="card"><h2>Log maintenance / issue</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label for="mk">Type</label><select id="mk" name="kind"><option value="issue">Issue</option><option value="repair">Repair</option><option value="inspection">Inspection</option><option value="scheduled">Scheduled (blocks bookings)</option></select>
+<label for="mst">Set machine to</label><select id="mst" name="state"><option value="under_maintenance">Under maintenance</option><option value="awaiting_inspection">Awaiting inspection</option><option value="none">No change</option></select>
+<label for="md">Description</label><textarea id="md" name="description" required></textarea>
+<label for="ws">Scheduled window start</label><input id="ws" type="datetime-local" name="window_start"><label for="we">Window end</label><input id="we" type="datetime-local" name="window_end">
+<button class="block">Log</button></form></div>
+{% if m.maintenance_state != 'none' %}<form method="post" action="/admin/machines/{{ m.id }}/clear" class="card"><h2>Inspection clearance</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label for="cn">Note</label><input id="cn" name="note"><button class="block">Clear and return to service</button></form>{% endif %}
+{% endif %}
+<h2>Maintenance log</h2>
+<div class="tablewrap"><table><tr><th>Opened</th><th>Type</th><th>Description</th><th>By</th><th>Closed</th><th></th></tr>
+{% for r in records %}<tr><td>{{ r.opened_at|local }}</td><td>{{ r.kind }}{% if r.window_start %}<br>{{ r.window_start|local }} → {{ r.window_end|local }}{% endif %}</td><td>{{ r.description }}</td><td>{{ r.opened_by }}</td><td>{{ r.closed_at|local }}</td>
+<td>{% if not r.closed_at and staff.role != 'monitor' %}<form class="inline" method="post" action="/admin/maintenance/{{ r.id }}/close"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary">Close</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="6">No records.</td></tr>{% endfor %}</table></div>
+<h2>Damage reports</h2>
+<div class="tablewrap"><table><tr><th>When</th><th>Student</th><th>Type</th><th>Description</th><th>Photo</th></tr>
+{% for d in damage %}<tr><td>{{ d.created_at|local }}</td><td>{{ d.student.full_name if d.student else '—' }}</td><td>{{ d.severity }}</td><td>{{ d.description }}</td><td>{% if d.photo_key %}<a href="{{ file_link('damage', d.id) }}" target="_blank" rel="noopener">photo</a>{% endif %}</td></tr>{% else %}<tr><td colspan="5">None.</td></tr>{% endfor %}</table></div>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<h1>Staff users</h1>
+{{ errors(errs) }}{% if msg %}<div class="success">{{ msg }}</div>{% endif %}
+<div class="tablewrap"><table>
+<tr><th>User</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr>
+{% for u in users %}<tr><td>{{ u.display_name }} <span class="muted">({{ u.username }})</span></td><td>{{ u.role }}</td>
+<td>{{ 'active' if u.active else 'disabled' }}</td><td>{{ u.last_login_at|local }}</td>
+<td>
+<form class="inline" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}">
+<select name="role" aria-label="Role" class="sm auto">{% for r in roles %}<option {% if r==u.role %}selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+<button class="small" name="action" value="set_role">Set role</button>
+{% if u.active %}<button class="small danger" name="action" value="deactivate">Disable</button>{% else %}<button class="small" name="action" value="activate">Enable</button>{% endif %}
+</form>
+<form class="inline" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}">
+<input type="password" name="password" placeholder="New password" aria-label="New password" autocomplete="new-password" class="sm w11">
+<button class="small secondary" name="action" value="reset_password">Reset password</button></form>
+</td></tr>{% endfor %}
+</table></div>
+<h2>Add staff user</h2>
+<form method="post" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="create">
+<label for="nu">Username</label><input id="nu" name="username" required>
+<label for="nd">Display name</label><input id="nd" name="display_name">
+<label for="ne">Email (optional)</label><input id="ne" name="email" type="email">
+<label for="nr">Role</label><select id="nr" name="role">{% for r in roles %}<option>{{ r }}</option>{% endfor %}</select>
+<label for="np">Password (10+ characters)</label><input id="np" name="password" type="password" autocomplete="new-password" required>
+<button class="block" type="submit">Create user</button></form>
+{% endblock %}

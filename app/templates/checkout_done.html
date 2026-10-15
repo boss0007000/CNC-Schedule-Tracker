@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="success" role="status"><strong>Checked out.</strong> You used the {{ s.machine.name }} for {{ s.duration_minutes }} minutes. Thanks for cleaning up!</div>
+<p><a href="/">Home</a></p>
+{% endblock %}

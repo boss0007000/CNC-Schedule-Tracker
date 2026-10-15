@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<h1>Approvals queue</h1>
+<nav class="toolbar" aria-label="Filter by status">
+{% for s, label in [('submitted','Pending'),('modifications_requested','Changes requested'),('approved','Approved'),('rejected','Rejected'),('all','All')] %}
+<a class="btn {% if status != s %}secondary{% endif %} small" href="?status={{ s }}">{{ label }}{% if s != 'all' %} ({{ counts.get(s, 0) }}){% endif %}</a>{% endfor %}
+</nav>
+<div class="tablewrap"><table>
+<tr><th>Submitted</th><th>Student</th><th>Project</th><th>Rev</th><th>Status</th><th></th></tr>
+{% for p in projects %}<tr><td>{{ p.updated_at|local }}</td><td>{{ p.student.full_name }}<br><span class="muted">{{ p.student.email }}</span></td>
+<td>{{ p.title }}</td><td>{{ p.revision_no }}</td><td>{{ p.status|replace('_',' ') }}</td><td><a class="btn small" href="/admin/approvals/{{ p.id }}">Review</a></td></tr>
+{% else %}<tr><td colspan="6">Nothing here.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

@@ -1,0 +1,87 @@
+"""Persists time-driven state changes. Safe to call at any time, from any process, any number of
+times (idempotent): the scheduler calls it every minute and busy pages call `lazy_sweep`, so a sleeping
+free-tier host catches up on the first request after it wakes."""
+from datetime import datetime, timedelta
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app import clock
+from app.models import RES_CONFIRMED, RES_COMPLETED, RES_NO_SHOW, Reservation, ShopSession, Student
+from app.services import audit, notify, reservations
+from app.services import settings as shop_settings
+
+_last_run: datetime | None = None
+LAZY_INTERVAL = timedelta(seconds=15)
+
+
+def reset_throttle() -> None:
+    global _last_run
+    _last_run = None
+
+
+def mark_no_show(db: Session, r: Reservation, now: datetime) -> None:
+    """Flag a reservation No-Show, release the slot (waitlist), maybe suspend repeat offenders."""
+    if r.status != RES_CONFIRMED:
+        return
+    cfg = shop_settings.load(db)
+    r.status = RES_NO_SHOW
+    audit.record(db, "system", "reservation.no_show", "reservation", r.id, {"status": RES_CONFIRMED},
+                 {"status": RES_NO_SHOW})
+    stu: Student = r.student
+    since = now - timedelta(days=cfg.noshow_window_days)
+    if stu.noshow_forgiven_at:
+        since = max(since, stu.noshow_forgiven_at)
+    db.flush()
+    count = db.scalar(select(func.count()).select_from(Reservation).where(
+        Reservation.student_id == stu.id, Reservation.status == RES_NO_SHOW, Reservation.start_at > since)) or 0
+    suspended_until = None
+    if count >= cfg.noshow_threshold and not (stu.suspended_until and stu.suspended_until > now):
+        suspended_until = now + timedelta(days=cfg.suspension_days)
+        stu.suspended_until = suspended_until
+        stu.suspension_reason = f"{count} no-shows in {cfg.noshow_window_days} days"
+        audit.record(db, "system", "student.auto_suspend", "student", stu.id, after={
+            "until": suspended_until, "reason": stu.suspension_reason})
+    notify.no_show(db, r, suspended_until)
+    if r.end_at > now:
+        reservations.promote_waitlist(db, r.machine_id, max(r.start_at, now), r.end_at, now)
+
+
+def sweep(db: Session, now: datetime | None = None) -> dict:
+    now = now or clock.now()
+    cfg = shop_settings.load(db)
+    grace = timedelta(minutes=cfg.checkin_grace_minutes)
+    buffer = timedelta(minutes=cfg.autoclose_buffer_minutes)
+    out = {"no_shows": 0, "overdue_warnings": 0, "auto_closed": 0, "offers_expired": 0}
+
+    for r in db.scalars(select(Reservation).where(Reservation.status == RES_CONFIRMED, Reservation.start_at < now)):
+        if now > r.grace_anchor + grace:
+            mark_no_show(db, r, now)
+            out["no_shows"] += 1
+
+    for s in db.scalars(select(ShopSession).where(ShopSession.status == "active", ShopSession.expected_end_at < now)):
+        if s.overdue_notified_at is None:
+            s.overdue_notified_at = now
+            notify.overdue_warning(db, s)
+            audit.record(db, "system", "session.overdue", "session", s.id)
+            out["overdue_warnings"] += 1
+        if now > s.expected_end_at + buffer:
+            from app.services import sessions
+            s.auto_closed, s.needs_review = True, True
+            sessions._close(db, s, now, status="auto_closed", end_time=s.expected_end_at)
+            notify.auto_closed(db, s)
+            out["auto_closed"] += 1
+
+    out["offers_expired"] = reservations.expire_offers(db, now)
+    db.flush()
+    return out
+
+
+def lazy_sweep(db: Session) -> None:
+    """Cheap, throttled sweep for request handlers (never required for correctness)."""
+    global _last_run
+    now = clock.now()
+    if _last_run is not None and timedelta(0) <= now - _last_run < LAZY_INTERVAL:
+        return
+    _last_run = now
+    sweep(db, now)

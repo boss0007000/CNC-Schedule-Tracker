@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors, field, csrf %}
+{% block content %}
+<h1>Verify your campus email</h1>
+<p>We'll email you a 6-digit code. Once verified you won't be asked again for 8 hours on this device.</p>
+{{ errors(errs) }}
+<form method="post" action="/verify" class="card" novalidate>
+  {{ csrf() }}
+  <input type="hidden" name="next" value="{{ next }}">
+  {{ field('Full name', 'full_name', v.full_name, autocomplete='name', error=ferr.full_name) }}
+  {{ field('Campus email', 'email', v.email, type='email', autocomplete='email', inputmode='email', help='Must end in @' ~ domain, error=ferr.email) }}
+  <label for="f_standing">Academic standing</label>
+  <select id="f_standing" name="standing" required>
+    <option value="">Choose…</option>
+    {% for s in standings %}<option value="{{ s }}" {% if v.standing == s %}selected{% endif %}>{{ s|title }}</option>{% endfor %}
+  </select>
+  {% if ferr.standing %}<p class="field-error">{{ ferr.standing }}</p>{% endif %}
+  {{ field('Course', 'course', v.course, required=False, help='For example ME 250') }}
+  {% if collect_student_id %}{{ field('Student ID', 'student_id', v.student_id, required=False, help='Optional.') }}{% endif %}
+  <button class="block" type="submit">Email me a code</button>
+</form>
+{% endblock %}

@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<h1>Students</h1>
+<form class="toolbar" method="get"><div><label for="q">Search name or email</label><input id="q" name="q" type="search" value="{{ q }}"></div><button>Search</button></form>
+<div class="tablewrap"><table><tr><th>Name</th><th>Email</th><th>Standing</th><th>Status</th></tr>
+{% for s in rows %}<tr><td><a href="/admin/students/{{ s.id }}">{{ s.full_name }}</a></td><td>{{ s.email }}</td><td>{{ s.standing }}</td><td>{% if s.suspended_until and s.suspended_until > now %}<span class="pill s-overdue">Suspended</span>{% else %}ok{% endif %}</td></tr>{% else %}<tr><td colspan="4">No students.</td></tr>{% endfor %}</table></div>
+{% endblock %}

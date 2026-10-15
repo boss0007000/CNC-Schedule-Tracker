@@ -1,0 +1,11 @@
+{% macro errors(list) %}{% if list %}<div class="errors" role="alert"><strong>Please fix the following:</strong><ul>{% for e in list %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}{% endmacro %}
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="form_token" value="{{ form_token }}"><div class="hp" aria-hidden="true"><label>Leave this empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>{% endmacro %}
+{% macro field(label, name, value='', type='text', help='', required=True, error=None, autocomplete=None, inputmode=None, maxlength=None) %}
+<label for="f_{{ name }}">{{ label }}{% if not required %} <span class="muted">(optional)</span>{% endif %}</label>
+<input id="f_{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ value or '' }}" {% if required %}required{% endif %}
+ {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %} {% if inputmode %}inputmode="{{ inputmode }}"{% endif %} {% if maxlength %}maxlength="{{ maxlength }}"{% endif %}
+ {% if error %}aria-invalid="true" aria-describedby="e_{{ name }}"{% elif help %}aria-describedby="h_{{ name }}"{% endif %}>
+{% if help %}<p class="help" id="h_{{ name }}">{{ help }}</p>{% endif %}
+{% if error %}<p class="field-error" id="e_{{ name }}">{{ error }}</p>{% endif %}
+{% endmacro %}
+{% macro pill(status) %}<span class="pill s-{{ status }}">{{ status|replace('_',' ')|title }}</span>{% endmacro %}

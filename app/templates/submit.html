@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors, field, csrf %}
+{% block content %}
+<h1>{% if project %}Update your project{% else %}Submit a project{% endif %}</h1>
+<p class="muted">Submitting as <strong>{{ student.full_name }}</strong> ({{ student.email }}).</p>
+{% if project and project.staff_comments %}<div class="notice"><strong>Staff feedback:</strong> {{ project.staff_comments }}</div>{% endif %}
+{{ errors(errs) }}
+<form method="post" enctype="multipart/form-data" class="card">
+  {{ csrf() }}
+  {{ field('Project title', 'title', v.title, maxlength=200) }}
+  <label for="f_description">Description</label>
+  <textarea id="f_description" name="description" required maxlength="5000">{{ v.description }}</textarea>
+  <p class="help">What are you making, and why? Include key dimensions and tolerances if they matter.</p>
+  <fieldset><legend>Machines you plan to use</legend>
+    {% for m in machines %}<div class="check"><input type="checkbox" id="m{{ m.id }}" name="machine_ids" value="{{ m.id }}" {% if m.id|string in v.machine_ids %}checked{% endif %}><label for="m{{ m.id }}">{{ m.name }}</label></div>{% endfor %}
+  </fieldset>
+  {{ field('Materials', 'materials', v.materials, required=False, help='For example: 6061 aluminum, 1/4 inch plate') }}
+  {{ field('Estimated machine hours', 'estimated_hours', v.estimated_hours, type='number', inputmode='decimal') }}
+  {{ field('Course', 'course', v.course, required=False) }}
+  {{ field('Instructor', 'instructor', v.instructor, required=False) }}
+  <label for="f_files">Drawings and files <span class="muted">(optional)</span></label>
+  <input id="f_files" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.dxf,.step,.stp,.stl">
+  <p class="help">Up to {{ max_files }} files, 10 MB each: PDF, images, DXF, STEP, STL.</p>
+  <button class="block" type="submit">{% if project %}Resubmit for review{% else %}Submit project{% endif %}</button>
+</form>
+{% endblock %}

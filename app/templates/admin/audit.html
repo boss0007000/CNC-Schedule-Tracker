@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<h1>Audit log</h1>
+<form class="toolbar" method="get"><div><label for="q">Filter</label><input id="q" name="q" value="{{ q }}" type="search"></div><button type="submit">Filter</button></form>
+<div class="tablewrap"><table>
+<tr><th>When</th><th>Who</th><th>Action</th><th>Entity</th><th>Before → After</th></tr>
+{% for r in rows %}<tr><td>{{ r.at|local }}</td><td>{{ r.actor }}</td><td>{{ r.action }}</td><td>{{ r.entity }} {{ r.entity_id }}</td>
+<td><code>{{ r.before }}</code> → <code>{{ r.after }}</code></td></tr>{% endfor %}
+</table></div>
+<p>{% if page > 1 %}<a href="?q={{ q }}&page={{ page-1 }}">← Newer</a>{% endif %} {% if more %}<a href="?q={{ q }}&page={{ page+1 }}">Older →</a>{% endif %}</p>
+{% endblock %}

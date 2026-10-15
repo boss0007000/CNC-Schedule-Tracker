@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ shop_name }}</h1>
+{% if emergency %}<div class="errors" role="alert"><strong>Shop closed:</strong> {{ emergency_message }}</div>{% endif %}
+<div class="tiles">
+  <a class="tile" href="/submit"><strong>1. Submit a project</strong>Get your project approved for shop machines.</a>
+  <a class="tile" href="/reserve"><strong>2. Reserve a machine</strong>Book a time slot with your approval number.</a>
+  <a class="tile" href="/checkin"><strong>3. Check in</strong>Arrived? Enter your reservation and the code on the TV.</a>
+  <a class="tile" href="/checkout"><strong>4. Check out</strong>Done? Complete the cleanup checklist.</a>
+</div>
+<p class="muted">You'll verify your campus email with a 6-digit code. No accounts or apps needed. <a href="/my">See my approvals and reservations</a>.</p>
+<p><a href="/admin">Staff login</a></p>
+{% endblock %}

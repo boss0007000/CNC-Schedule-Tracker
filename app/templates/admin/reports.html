@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<h1>Reports</h1>
+<form class="toolbar" method="get"><div><label for="f">From</label><input id="f" type="date" name="frm" value="{{ start }}"></div><div><label for="t">To</label><input id="t" type="date" name="to" value="{{ end }}"></div><button>Update</button></form>
+
+<h2>Machine utilization and downtime</h2>
+<div class="tablewrap"><table><tr><th>Machine</th><th class="num">Open hrs</th><th class="num">Booked hrs</th><th class="num">Used hrs</th><th>Utilization</th><th class="num">Downtime hrs</th></tr>
+{% for u in util %}<tr><td>{{ u.machine }}</td><td class="num">{{ u.open_hours }}</td><td class="num">{{ u.booked_hours }}</td><td class="num">{{ u.used_hours }}</td>
+<td><meter min="0" max="100" value="{{ u.utilization_pct }}">{{ u.utilization_pct }}%</meter> {{ u.utilization_pct }}%</td><td class="num">{{ u.downtime_hours }}</td></tr>{% endfor %}</table></div>
+
+<div class="grid2">
+<div><h2>Peak hours</h2><div class="tablewrap"><table><tr><th>Hour</th><th>Reservations</th></tr>
+{% for p in peaks.hours %}<tr><td>{{ p.label }}</td><td><meter min="0" max="{{ max_peak }}" value="{{ p.count }}">{{ p.count }}</meter> {{ p.count }}</td></tr>{% endfor %}</table></div></div>
+<div><h2>Busiest weekdays</h2><div class="tablewrap"><table><tr><th>Day</th><th>Reservations</th></tr>
+{% for p in peaks.weekdays %}<tr><td>{{ p.label }}</td><td><meter min="0" max="{{ [peaks.weekdays|map(attribute='count')|max, 1]|max }}" value="{{ p.count }}">{{ p.count }}</meter> {{ p.count }}</td></tr>{% endfor %}</table></div></div>
+</div>
+
+<div class="grid2">
+<div><h2>Demand by week</h2><div class="tablewrap"><table><tr><th>Week</th><th class="num">Reservations</th></tr>{% for d in demand.weeks %}<tr><td>{{ d.label }}</td><td class="num">{{ d.count }}</td></tr>{% else %}<tr><td colspan="2">No data.</td></tr>{% endfor %}</table></div></div>
+<div><h2>Demand by day</h2><div class="tablewrap"><table><tr><th>Day</th><th class="num">Reservations</th></tr>{% for d in demand.days %}<tr><td>{{ d.label }}</td><td class="num">{{ d.count }}</td></tr>{% else %}<tr><td colspan="2">No data.</td></tr>{% endfor %}</table></div></div>
+</div>
+
+<h2>No-show rates</h2>
+<p>Overall: <strong>{{ noshow.overall.pct }}%</strong> ({{ noshow.overall.no_shows }} of {{ noshow.overall.total }} bookings that reached their time).</p>
+<div class="grid2">
+<div class="tablewrap"><table><tr><th>Machine</th><th class="num">No-shows</th><th class="num">Bookings</th><th class="num">Rate</th></tr>{% for r in noshow.machines %}<tr><td>{{ r.name }}</td><td class="num">{{ r.no_shows }}</td><td class="num">{{ r.total }}</td><td class="num">{{ r.pct }}%</td></tr>{% else %}<tr><td colspan="4">No data.</td></tr>{% endfor %}</table></div>
+<div class="tablewrap"><table><tr><th>Student</th><th class="num">No-shows</th><th class="num">Bookings</th></tr>{% for r in noshow.students %}<tr><td>{{ r.name }}<br><span class="muted">{{ r.email }}</span></td><td class="num">{{ r.no_shows }}</td><td class="num">{{ r.total }}</td></tr>{% else %}<tr><td colspan="3">No no-shows.</td></tr>{% endfor %}</table></div>
+</div>
+
+<h2>Recurring maintenance issues</h2>
+<div class="tablewrap"><table><tr><th>Machine</th><th class="num">Issues logged</th><th class="num">Damage reports</th><th>Recent examples</th><th></th></tr>
+{% for i in issues %}<tr><td>{{ i.machine }}</td><td class="num">{{ i.issues }}</td><td class="num">{{ i.damage_reports }}</td><td>{{ i.examples|join('; ') }}</td><td>{% if i.recurring %}<span class="pill s-awaiting_inspection">Recurring</span>{% endif %}</td></tr>{% else %}<tr><td colspan="5">No issues in this period.</td></tr>{% endfor %}</table></div>
+
+<h2>Per-student history</h2>
+<form class="toolbar" method="get"><input type="hidden" name="frm" value="{{ start }}"><input type="hidden" name="to" value="{{ end }}"><div><label for="em">Student email</label><input id="em" type="email" name="email" value="{{ email }}"></div><button>Look up</button></form>
+{% if email %}{% if hist %}<div class="card"><strong>{{ hist.student.full_name }}</strong> ({{ hist.student.email }})<dl class="kv"><dt>Reservations</dt><dd>{{ hist.reservations }}</dd><dt>Sessions</dt><dd>{{ hist.sessions }}</dd><dt>Hours used</dt><dd>{{ hist.hours }}</dd><dt>No-shows</dt><dd>{{ hist.no_shows }}</dd><dt>Cancelled</dt><dd>{{ hist.cancelled }}</dd><dt>Auto-closed</dt><dd>{{ hist.auto_closed }}</dd></dl></div>{% else %}<p>No student with that email.</p>{% endif %}{% endif %}
+
+<h2>CSV exports</h2>
+<ul>{% for t in tables %}{% if t not in admin_only or staff.role == 'admin' %}<li><a href="/admin/export/{{ t }}.csv">{{ t }}</a></li>{% endif %}{% endfor %}</ul>
+{% endblock %}
