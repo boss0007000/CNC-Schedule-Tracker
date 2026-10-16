@@ -1,6 +1,6 @@
 # Test and load summary
 
-**Suite:** 369 tests, all passing — `369 passed` on SQLite (`pytest -q`).
+**Suite:** 389 tests, all passing — `389 passed` on SQLite (`pytest -q`).
 The same suite passes against a real **PostgreSQL 16** (embedded via `python -m scripts.pg_test`, run per file). The Alembic migration
 (including the Postgres audit-log trigger) was applied to Postgres by the load-test harness; `alembic check` shows no drift.
 Not tested: the real Brevo/Resend APIs, a real hosted Render/Neon deployment, ClamAV, and a physical TV/phones.
@@ -17,6 +17,7 @@ Not tested: the real Brevo/Resend APIs, a real hosted Render/Neon deployment, Cl
 | test_m8_reports | report numbers, CSV (redaction, injection), QR/PDF, backup round-trip, settings, purge |
 | test_m10_access_contact | access lists, tier caps, staff-run machines, phone ack, schedules, polite time-change requests, early start |
 | test_m11_holds | setup/tools holds (business-day caps, reminders, expiry, one-tap links), mandatory phone, 8-22 hours, open-ended use |
+| test_m12_supervisor_checkin | pending/approve/deny/expire check-ins, supervisor exemption, never-a-no-show, reports, TV, admin page |
 | test_m9_hardening | every-route CSRF/auth checks, role matrix, XSS/SQLi, IDOR, headers, prod config, accessibility |
 
 ## Load test (50 concurrent virtual students + TV polling, 30 s, one uvicorn worker, Postgres 16, laptop)

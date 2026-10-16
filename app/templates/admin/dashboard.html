@@ -5,6 +5,7 @@
 <div data-refresh="30"></div>
 <h1>Dashboard</h1>
 {{ errors(errs) }}
+{% if waiting_checkins %}<div class="errors" role="alert"><strong>{{ waiting_checkins }} check-in{{ 's' if waiting_checkins != 1 }} waiting for a supervisor.</strong> <a class="btn small" href="/admin/checkins">Review now</a></div>{% endif %}
 {% if cfg.emergency_active %}
 <div class="errors" role="alert"><strong>EMERGENCY CLOSE ACTIVE.</strong> {{ cfg.emergency_message }}
 {% if staff.role != 'monitor' %}<form method="post" action="/admin/emergency" class="toolbar"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="reopen">

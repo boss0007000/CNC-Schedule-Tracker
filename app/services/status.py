@@ -67,6 +67,7 @@ class StatusInputs:
     session: SessionInfo | None = None
     reservations: list[ResInfo] = field(default_factory=list)  # confirmed, not yet checked in
     hold: HoldInfo | None = None
+    pending: SessionInfo | None = None  # arrived, waiting for a supervisor to approve the check-in
     close_at: datetime | None = None  # today's closing time (limits open-ended use)
     reserved_lead: timedelta = timedelta(minutes=30)
     grace: timedelta = timedelta(minutes=15)
@@ -141,6 +142,9 @@ def derive(inp: StatusInputs, now: datetime) -> MachineState:
         h = inp.hold
         return done(MS_HOLD, current_user=h.student_name, current_phone=h.phone, hold_kind=h.kind, hold_until=h.until,
                     reason="Setup in the machine" if h.kind == "setup" else "Tools in the machine")
+    if inp.pending:
+        return done(MS_RESERVED, current_user=inp.pending.student_name, current_phone=inp.pending.phone,
+                    reason="Waiting for a supervisor to approve check-in")
     imminent = [r for r in live if r.start - inp.reserved_lead <= now]
     if imminent:
         r = imminent[0]
@@ -162,6 +166,8 @@ def load_inputs(db: Session, machines: list[Machine], now: datetime | None = Non
                                                   Reservation.status == RES_CONFIRMED, Reservation.end_at > now,
                                                   Reservation.start_at < horizon).order_by(Reservation.start_at)):
         by_machine[r.machine_id].append(ResInfo(r.start_at, r.end_at, r.grace_anchor, r.student.public_name, r.student.phone))
+    pendings = {s.machine_id: s for s in db.scalars(
+        select(ShopSession).where(ShopSession.machine_id.in_(ids), ShopSession.status == "pending"))}
     holds = {h.machine_id: h for h in db.scalars(select(MachineHold).where(
         MachineHold.machine_id.in_(ids), MachineHold.released_at.is_(None), MachineHold.expires_at > now))}
     from app.services import shop
@@ -176,6 +182,8 @@ def load_inputs(db: Session, machines: list[Machine], now: datetime | None = Non
             session=SessionInfo(s.student.public_name, s.checked_in_at, s.expected_end_at, s.student.phone) if s else None,
             hold=(HoldInfo(holds[m.id].student.public_name, holds[m.id].kind, holds[m.id].expires_at, holds[m.id].student.phone)
                   if m.id in holds else None), close_at=close_at,
+            pending=(SessionInfo(pendings[m.id].student.public_name, pendings[m.id].checked_in_at, pendings[m.id].expected_end_at,
+                                 pendings[m.id].student.phone) if m.id in pendings else None),
             reservations=by_machine[m.id], reserved_lead=timedelta(minutes=cfg.reserved_lead_minutes),
             grace=timedelta(minutes=cfg.checkin_grace_minutes))
     return out

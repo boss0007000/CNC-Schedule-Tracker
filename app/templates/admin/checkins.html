@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<div data-refresh="10"></div>
+<h1>Check-ins waiting for a supervisor</h1>
+{% if msg %}<div class="notice" role="status">{{ msg }}</div>{% endif %}
+<p>The student is at the shop and proved it with the TV code. Approve only if you've confirmed they are authorized to use this machine.</p>
+{% for it in items %}{% set s = it.s %}{% set a = it.a %}
+<div class="card"><h2>{{ s.student.full_name }} <span class="muted">on {{ s.machine.name }}</span></h2>
+<p>Waiting since {{ s.requested_at|localtime }} · booked {{ s.reservation.start_at|localtime }}–{{ s.reservation.end_at|localtime }} · {{ s.student.phone|pretty_phone or 'no phone' }}</p>
+<ul>
+<li>{{ '✔' if a.covers else '✘' }} Approval {{ a.approval or 'none' }} {{ 'covers this machine' if a.covers else 'does NOT cover this machine' }}{% if a.project %} ({{ a.project }}){% endif %}</li>
+<li>{{ '✔' if a.on_list and a.machine_ok else '✘' }} {{ 'On the access list for this machine' if a.on_list and a.machine_ok else 'Not cleared for this machine by the access lists' }}</li>
+<li>{% if a.cert_required %}{{ '✔' if a.cert_ok else '✘' }} {{ 'Certification current' ~ (' until ' ~ (a.cert_expires|localdate) if a.cert_expires else '') if a.cert_ok else 'No current certification' }}{% else %}✔ No certification needed for this machine{% endif %}</li>
+<li>{{ '✔' if a.waiver else '✘' }} Safety waiver {{ 'signed' if a.waiver else 'NOT signed' }}</li></ul>
+{% if staff.role != 'monitor' %}<form class="inline" method="post" action="/admin/checkins/{{ s.id }}/approve"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Approve: they're authorized</button></form>
+<form class="inline" method="post" action="/admin/checkins/{{ s.id }}/deny" data-confirm="Deny this check-in?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="danger" type="submit">Deny</button></form>{% endif %}</div>
+{% else %}<div class="notice">Nobody is waiting.</div>{% endfor %}
+<h2>Recent decisions</h2>
+<div class="tablewrap"><table><tr><th>When</th><th>Student</th><th>Machine</th><th>Result</th><th>By</th></tr>
+{% for s in recent %}<tr><td>{{ (s.approved_at or s.requested_at)|local }}</td><td>{{ s.student.full_name }}</td><td>{{ s.machine.name }}</td><td>{{ s.status }}</td><td>{{ s.approved_by or '' }}</td></tr>{% else %}<tr><td colspan="5">None yet.</td></tr>{% endfor %}</table></div>
+{% endblock %}

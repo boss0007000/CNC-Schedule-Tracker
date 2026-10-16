@@ -37,6 +37,8 @@ DEFAULTS: dict[str, object] = {
     "tools_hold_max_business_days": 1,  # only-my-tools-in-it
     "closing_prompt_minutes": 30,  # before closing, ask people still on a machine if anything is staying
     "tv_show_phone": True,  # numbers of the current user / next booking shown on the shop TV
+    "require_supervisor_checkin": True,  # a supervisor must approve each student check-in
+    "supervisor_checkin_wait_minutes": 20,  # a waiting request expires after this long
     "early_checkin_max_minutes": 120,  # check in early when the machine is idle and nobody else is booked first
     "change_request_hours": 48,  # how long a time-change request stays open
     "max_open_change_requests": 3,
@@ -77,6 +79,8 @@ SETTING_META: list[tuple[str, str, str]] = [
     ("tools_hold_max_business_days", "int", "Tools-only hold: max open days"),
     ("closing_prompt_minutes", "int", "Ask people still on a machine about leftovers this long before closing (min)"),
     ("tv_show_phone", "bool", "Show phone numbers on the shop TV (current user + next booking)"),
+    ("require_supervisor_checkin", "bool", "A supervisor must approve each student check-in"),
+    ("supervisor_checkin_wait_minutes", "int", "Waiting check-in requests expire after (minutes)"),
     ("early_checkin_max_minutes", "int", "Earliest an idle machine can be started early (minutes)"),
     ("change_request_hours", "int", "Time-change request stays open (hours)"),
     ("max_open_change_requests", "int", "Max open time-change requests per student"),

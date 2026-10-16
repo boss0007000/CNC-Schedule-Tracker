@@ -266,7 +266,7 @@ def test_pages_pass_accessibility_checks(client, db, demo):
         for path in ("/admin", "/admin/approvals", "/admin/approvals/1", "/admin/reservations", "/admin/reservations?view=calendar",
                      "/admin/sessions", "/admin/machines", "/admin/machines/1", "/admin/students", "/admin/students/1",
                      "/admin/incidents", "/admin/reports", "/admin/qr", "/admin/settings", "/admin/users", "/admin/audit",
-                     "/admin/backups", "/admin/access", "/admin/requests"):
+                     "/admin/backups", "/admin/access", "/admin/requests", "/admin/checkins"):
             audit_html(sc.get(path).text, path)
 
 

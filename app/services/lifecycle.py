@@ -56,7 +56,19 @@ def sweep(db: Session, now: datetime | None = None) -> dict:
     buffer = timedelta(minutes=cfg.autoclose_buffer_minutes)
     out = {"no_shows": 0, "overdue_warnings": 0, "auto_closed": 0, "offers_expired": 0}
 
+    arrivals: dict[int, datetime] = {}
+    for rid, at_, in db.execute(select(ShopSession.reservation_id, ShopSession.requested_at).where(
+            ShopSession.status.in_(("pending", "expired", "denied")), ShopSession.requested_at.is_not(None))):
+        arrivals[rid] = min(at_, arrivals.get(rid, at_))
     for r in db.scalars(select(Reservation).where(Reservation.status == RES_CONFIRMED, Reservation.start_at < now)):
+        if r.id in arrivals and arrivals[r.id] <= r.grace_anchor + grace:
+            # They showed up on time and asked to check in. Whether a supervisor got to them is not their fault:
+            # never a no-show. If their whole slot passes without an approved session, release it quietly.
+            if now > r.end_at and not db.scalar(select(ShopSession.id).where(ShopSession.reservation_id == r.id,
+                                                                              ShopSession.status == "pending")):
+                r.status, r.cancelled_at, r.cancel_reason = "cancelled", now, "no supervisor approval before the slot ended"
+                audit.record(db, "system", "reservation.unapproved_release", "reservation", r.id)
+            continue
         if now > r.grace_anchor + grace:
             mark_no_show(db, r, now)
             out["no_shows"] += 1
@@ -78,6 +90,8 @@ def sweep(db: Session, now: datetime | None = None) -> dict:
             out["auto_closed"] += 1
 
     out["offers_expired"] = reservations.expire_offers(db, now)
+    from app.services import sessions as sessions_svc
+    out["checkins_expired"] = sessions_svc.expire_pending(db, now)
     out["holds_expired"] = holds.expire_due(db, now)
     out["hold_reminders"] = holds.daily_reminders(db, now)
     out["closing_prompts"] = holds.closing_prompts(db, now)

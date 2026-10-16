@@ -13,7 +13,7 @@
   <nav aria-label="Main">
     {% if staff %}
       <a href="/admin">Dashboard</a><a href="/admin/approvals">Approvals</a><a href="/admin/reservations">Reservations</a>
-      <a href="/admin/sessions">Sessions</a><a href="/admin/machines">Machines</a><a href="/admin/students">Students</a><a href="/admin/access">Access</a><a href="/admin/requests">Requests</a>
+      <a href="/admin/checkins">Check-ins</a><a href="/admin/sessions">Sessions</a><a href="/admin/machines">Machines</a><a href="/admin/students">Students</a><a href="/admin/access">Access</a><a href="/admin/requests">Requests</a>
       <a href="/admin/incidents">Incidents</a><a href="/admin/reports">Reports</a><a href="/admin/qr">QR codes</a>
       {% if staff.role == 'admin' %}<a href="/admin/settings">Settings</a>{% endif %}
       <form class="inline" method="post" action="/admin/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary" type="submit">Log out ({{ staff.username }})</button></form>

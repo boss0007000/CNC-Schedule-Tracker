@@ -69,6 +69,7 @@ Data model: [docs/data-model.md](docs/data-model.md). Security review: [docs/sec
 * Virus scanning is a documented hook (`CLAMD_HOST`), off by default. File viewer links expire after 15 minutes.
 * Student identity fields are collected on the verify page (once per 8 h), not repeated on every form.
 * **Hours** default to Mon-Fri 8 AM-10 PM (editable). A student may keep working past their slot when nobody is booked next and the shop is open; that time never counts toward any cap, and the session only becomes overdue when the next booking starts or the shop closes.
+* **Supervisor check-in:** every student check-in must be approved by a supervisor (Admin > Check-ins); supervisors/admins checking themselves in are exempt. Setting: require_supervisor_checkin.
 * **Access:** two staff-managed lists (approved: sessions up to 6 h, standard machines; super approved: up to 12 h, all student-bookable machines). Staff-run machines accept project submissions only. The 12-hour figure is a setting (you mentioned 14 earlier).
 * **Holds:** "setup" or "tools only" left in a machine blocks others for a capped number of open days (3 / 1), with daily reminders and a closing-time prompt.
 * **Phone numbers** are required to reserve and are displayed on the schedule page and TV (see docs/security-review.md).

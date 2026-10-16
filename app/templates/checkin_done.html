@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="success" role="status"><strong>You're checked in</strong> to the {{ s.machine.name }} at {{ s.checked_in_at|localtime }}.</div>
-<p>Your time ends at <strong>{{ s.expected_end_at|localtime }}</strong>. When you finish, scan the Check out code and complete the cleanup checklist. Sessions not closed shortly after the end time are closed automatically and flagged.</p>
+{% if s.status == 'pending' %}
+<div data-refresh="5"></div>
+<div class="notice" role="status"><strong>You're in the queue.</strong> A supervisor needs to confirm you're set up for the {{ s.machine.name }}. Find the supervisor on duty and let them know. This page updates by itself.</div>
+<p class="muted">Asked at {{ s.requested_at|localtime }}. The request expires if nobody confirms it in a few minutes; you can just check in again.</p>
+<form method="post" action="/checkin/done/{{ s.id }}/cancel"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="secondary" type="submit">Cancel my request</button></form>
+{% elif s.status == 'active' %}
+<div class="success" role="status"><strong>You're checked in</strong> to the {{ s.machine.name }} at {{ s.checked_in_at|localtime }}{% if s.approved_by and s.approved_by != 'exempt' %}, confirmed by {{ s.approved_by }}{% endif %}.</div>
+<p>Your time ends at <strong>{{ s.expected_end_at|localtime }}</strong>. If nobody is booked after you, you may keep going until the next booking or closing time. When you finish, scan the Check out code and complete the cleanup checklist.</p>
 <p><a class="btn" href="/checkout">Check out</a></p>
+{% elif s.status == 'denied' %}
+<div class="errors" role="alert"><strong>A supervisor couldn't approve this check-in.</strong> Please speak with them about the {{ s.machine.name }}.</div>
+<p><a class="btn secondary" href="/my">My shop</a></p>
+{% elif s.status in ('closed','auto_closed','force_closed') %}
+<div class="notice">This session has finished.</div><p><a href="/my">My shop</a></p>
+{% else %}
+<div class="notice">This check-in request ended without approval. <a href="/checkin">Check in again</a> if you still need the machine.</div>
+{% endif %}
 {% endblock %}

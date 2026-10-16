@@ -60,5 +60,7 @@ def client():
 def demo(db):
     from scripts.seed import seed_demo
     info = seed_demo(db)
+    from app.services import settings as _s
+    _s.set_value(db, "require_supervisor_checkin", False)  # tests of the older flows; new tests switch it on
     db.commit()
     return info

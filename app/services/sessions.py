@@ -1,13 +1,14 @@
 """Check-in / check-out and staff overrides."""
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import clock
 from app.errors import UserError
 from app.models import (
+    ACCESS_APPROVED, StaffUser,
     RES_CHECKED_IN, RES_COMPLETED, RES_CONFIRMED, DamageReport, MaintenanceRecord, Reservation, ShopSession, Student,
 )
 from app.services import access, audit, files, holds, notify, numbers, reservations, rotcode
@@ -60,6 +61,9 @@ def check_in(db: Session, student: Student, ref: str, shop_code: str, ip: str, *
                         f"as a no-show and the slot was released. Please book a new time.", code="late", persist=True)
     if active_session_for(db, student.id):
         raise UserError("You're already checked in on another machine. Check out of it first.", code="has_active")
+    waiting = pending_session_for(db, student.id)
+    if waiting is not None and waiting.reservation_id != r.id:
+        raise UserError("You already have a check-in waiting for a supervisor on another machine.", code="has_pending")
     if r.machine.maintenance_state != "none":
         raise UserError(f"The {name} is not available right now ({r.machine.maintenance_state.replace('_', ' ')}). "
                         f"Please see shop staff.", code="maintenance")
@@ -74,7 +78,97 @@ def check_in(db: Session, student: Student, ref: str, shop_code: str, ip: str, *
     if busy:
         raise UserError(f"The {name} still shows as in use by the previous person. Ask shop staff to clear it.",
                         code="machine_busy")
-    return _start_session(db, r, now, actor=f"student:{student.email}")
+    if waiting is not None:  # double-tap / re-scan: it is the same request
+        return waiting
+    if cfg.require_supervisor_checkin and not is_supervisor(db, student.email):
+        return _request_checkin(db, r, now)
+    return _start_session(db, r, now, actor=f"student:{student.email}",
+                          approved_by="exempt" if is_supervisor(db, student.email) else None)
+
+
+def is_supervisor(db: Session, email: str) -> bool:
+    """Supervisors and admins don't need a second person to approve their own check-in."""
+    return db.scalar(select(StaffUser.id).where(StaffUser.active.is_(True), StaffUser.role.in_(("supervisor", "admin")),
+                                                 func.lower(StaffUser.email) == email.strip().lower())) is not None
+
+
+def pending_session_for(db: Session, student_id: int) -> ShopSession | None:
+    return db.scalar(select(ShopSession).where(ShopSession.student_id == student_id, ShopSession.status == "pending"))
+
+
+def _request_checkin(db: Session, r: Reservation, now: datetime) -> ShopSession:
+    """The student is here and has proved it (shop code). A supervisor must confirm they're authorized."""
+    s = ShopSession(reservation_id=r.id, student_id=r.student_id, machine_id=r.machine_id, checked_in_at=now,
+                    requested_at=now, expected_end_at=max(r.end_at, now + timedelta(minutes=1)), status="pending")
+    db.add(s)
+    db.flush()
+    s.student, s.machine = r.student, r.machine
+    audit.record(db, f"student:{r.student.email}", "session.check_in_requested", "session", s.id,
+                 after={"reservation": r.ref, "machine": r.machine.name})
+    notify.checkin_waiting(db, s)
+    return s
+
+
+def authorization_summary(db: Session, s: ShopSession) -> dict:
+    """What a supervisor is confirming when they approve."""
+    r, st, m = s.reservation, s.student, s.machine
+    cfg = shop_settings.load(db)
+    cert, expired = reservations.find_certification(db, st.id, m, clock.now()) if m.requires_certification else (None, None)
+    lvl = access.effective_level(db, st)
+    return {
+        "approval": r.approval.number if r and r.approval else None,
+        "project": r.approval.project.title if r and r.approval else None,
+        "covers": bool(r and r.approval and m.id in r.approval.machine_ids),
+        "cert_required": m.requires_certification,
+        "cert_ok": (cert is not None) if m.requires_certification else True,
+        "cert_expires": cert.expires_at if cert else None,
+        "on_list": lvl is not None, "machine_ok": access.machine_allows(lvl, m),
+        "waiver": reservations.has_waiver(db, st.id, cfg.waiver_version),
+    }
+
+
+def approve_checkin(db: Session, s: ShopSession, actor: str, now: datetime | None = None) -> ShopSession:
+    now = now or clock.now()
+    if s.status != "pending":
+        raise UserError("That check-in isn't waiting for approval any more.", code="closed")
+    if db.scalar(select(ShopSession.id).where(ShopSession.machine_id == s.machine_id, ShopSession.status == "active")):
+        raise UserError(f"The {s.machine.name} still shows someone on it. Close that session first.", code="machine_busy")
+    r = s.reservation
+    s.status, s.approved_by, s.approved_at, s.checked_in_at = "active", actor.split(":", 1)[-1], now, now
+    s.expected_end_at = max(r.end_at, now + timedelta(minutes=1))
+    r.status = RES_CHECKED_IN
+    try:
+        db.flush()
+    except IntegrityError:
+        raise UserError("This student or machine already has an active session.", code="duplicate") from None
+    audit.record(db, actor, "session.approve", "session", s.id, {"status": "pending"}, {"status": "active"})
+    return s
+
+
+def deny_checkin(db: Session, s: ShopSession, actor: str, reason: str = "") -> None:
+    if s.status != "pending":
+        raise UserError("That check-in isn't waiting for approval any more.", code="closed")
+    s.status, s.approved_by, s.approved_at = "denied", actor.split(":", 1)[-1], clock.now()
+    audit.record(db, actor, "session.deny", "session", s.id, {"status": "pending"}, {"status": "denied", "reason": reason})
+
+
+def cancel_request(db: Session, s: ShopSession, student: Student) -> None:
+    if s.student_id != student.id or s.status != "pending":
+        raise UserError("That request can't be cancelled.", code="closed")
+    s.status = "expired"
+    audit.record(db, f"student:{student.email}", "session.check_in_cancelled", "session", s.id)
+
+
+def expire_pending(db: Session, now: datetime | None = None) -> int:
+    now = now or clock.now()
+    wait = timedelta(minutes=shop_settings.load(db).supervisor_checkin_wait_minutes)
+    n = 0
+    for s in db.scalars(select(ShopSession).where(ShopSession.status == "pending")):
+        if (s.requested_at or s.checked_in_at) + wait <= now:
+            s.status = "expired"
+            audit.record(db, "system", "session.check_in_expired", "session", s.id)
+            n += 1
+    return n
 
 
 def early_window_opens(db: Session, r: Reservation, now: datetime, cfg) -> datetime | None:
@@ -111,9 +205,11 @@ def notify_next_up(db: Session, machine_id: int, now: datetime) -> None:
     audit.record(db, "system", "early.notified", "reservation", nxt.id)
 
 
-def _start_session(db: Session, r: Reservation, now: datetime, actor: str, forced_by: str | None = None) -> ShopSession:
+def _start_session(db: Session, r: Reservation, now: datetime, actor: str, forced_by: str | None = None,
+                   approved_by: str | None = None) -> ShopSession:
     s = ShopSession(reservation_id=r.id, student_id=r.student_id, machine_id=r.machine_id, checked_in_at=now,
-                    expected_end_at=max(r.end_at, now + timedelta(minutes=1)), forced_by=forced_by)
+                    expected_end_at=max(r.end_at, now + timedelta(minutes=1)), forced_by=forced_by,
+                    requested_at=now, approved_by=forced_by or approved_by, approved_at=now)
     r.status = RES_CHECKED_IN
     try:
         with db.begin_nested():
@@ -137,6 +233,10 @@ def force_check_in(db: Session, r: Reservation, actor: str, reason: str, now: da
         raise UserError("That student already has an active session.")
     if db.scalar(select(ShopSession.id).where(ShopSession.machine_id == r.machine_id, ShopSession.status == "active")):
         raise UserError("That machine has an active session. Close it first.")
+    stale = db.scalars(select(ShopSession).where(ShopSession.reservation_id == r.id, ShopSession.status == "pending")).all()
+    for p_ in stale:
+        p_.status = "expired"
+    db.flush()
     s = _start_session(db, r, now, actor, forced_by=actor.split(":", 1)[-1])
     audit.record(db, actor, "session.force_reason", "session", s.id, after={"reason": reason})
     return s

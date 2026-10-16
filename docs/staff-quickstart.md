@@ -20,6 +20,9 @@ Roles: **monitor** = read-only · **supervisor** = approvals, reservations, mach
 * **Repeated no-shows:** 3 in 30 days auto-suspends booking for 14 days. Lift it on the student page (reason required) — earlier no-shows are forgiven.
 * **Injury or near-miss:** Incidents > Record an incident (separate from damage reports).
 
+## Approving student check-ins
+When a student checks in they enter their reservation and the TV code, then wait. **Admin > Check-ins** (also linked from a red banner on the dashboard, and emailed to the supervisor on duty) shows who is waiting and what you are confirming: their approval covers the machine, they are on the access list for it, their certification is current, and the waiver is signed. Tap **Approve** (the machine goes to In Use) or **Deny**. Supervisors and admins checking in themselves skip this. Requests expire after 20 minutes and a student who is waiting is never counted as a no-show. Turn the rule off in Settings if you ever need to.
+
 ## Who may use which machine (access lists)
 * **Admin/Supervisor > Access** holds two lists: **Approved** and **Super approved**. A student must be on a list to book anything. Paste several emails at once; students never see which list anyone is on.
 * Each machine has a **"Who can book it"** setting (Admin > Machines): *everyone on a list*, *super approved only*, or *staff-run*. Staff-run machines (for example the Fibercell FC50) cannot be booked by students, who submit parts for them on the project form; you make the part.

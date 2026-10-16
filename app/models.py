@@ -329,6 +329,10 @@ class ShopSession(Base):
     forced_by: Mapped[str | None] = mapped_column(String(60))
     checklist: Mapped[dict | None] = mapped_column(JSON)
     overdue_notified_at: Mapped[datetime | None]
+    # supervisor co-check-in: status 'pending' (waiting for a supervisor) -> 'active', or 'denied' / 'expired'
+    requested_at: Mapped[datetime | None]  # when the student arrived and asked to check in
+    approved_by: Mapped[str | None] = mapped_column(String(60))  # supervisor username (or 'exempt' for supervisors)
+    approved_at: Mapped[datetime | None]
     student: Mapped[Student] = relationship()
     machine: Mapped[Machine] = relationship()
     reservation: Mapped[Reservation | None] = relationship()

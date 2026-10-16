@@ -63,6 +63,19 @@ def checkin_done(sid: int, request: Request, student: Student = Depends(student_
     return render(request, "checkin_done.html", {"s": s})
 
 
+@router.post("/checkin/done/{sid}/cancel")
+def checkin_cancel(sid: int, student: Student = Depends(student_required), db: Session = Depends(get_db)):
+    s = db.get(ShopSession, sid)
+    if s is None or s.student_id != student.id:
+        raise HTTPException(404, "Not found.")
+    try:
+        sessions.cancel_request(db, s, student)
+        db.commit()
+    except UserError:
+        db.rollback()
+    return RedirectResponse(f"/checkin/done/{sid}", status_code=303)
+
+
 @router.get("/checkout")
 def checkout_form(request: Request, student: Student = Depends(student_required), db: Session = Depends(get_db)):
     lifecycle.lazy_sweep(db)

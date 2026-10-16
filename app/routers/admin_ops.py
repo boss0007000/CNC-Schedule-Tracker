@@ -654,3 +654,38 @@ def hold_place(mid: int, form=Depends(get_form), user: StaffUser = Depends(super
         db.rollback()
         return RedirectResponse(f"/admin/machines/{mid}?msg={e.message}", status_code=303)
     return _done(db, f"/admin/machines/{mid}?msg=Hold placed")
+
+
+# ================================================================ supervisor check-in approvals
+@router.get("/checkins")
+def checkins_page(request: Request, user: StaffUser = Depends(monitor), db: Session = Depends(get_db)):
+    from app.models import ShopSession
+    from app.services import lifecycle, sessions
+    lifecycle.lazy_sweep(db)
+    pend = db.scalars(select(ShopSession).where(ShopSession.status == "pending").order_by(ShopSession.requested_at)).all()
+    recent = db.scalars(select(ShopSession).where(ShopSession.status.in_(("denied",)) | (ShopSession.approved_by.is_not(None)))
+                        .order_by(ShopSession.id.desc()).limit(15)).all()
+    return render(request, "admin/checkins.html", {"items": [{"s": s, "a": sessions.authorization_summary(db, s)} for s in pend],
+                                                   "recent": recent, "msg": request.query_params.get("msg")})
+
+
+@router.post("/checkins/{sid}/{action}")
+def checkin_decide(sid: int, action: str, user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+    from app.models import ShopSession
+    from app.services import sessions
+    s = db.get(ShopSession, sid)
+    if s is None:
+        raise HTTPException(404, "Not found.")
+    try:
+        if action == "approve":
+            sessions.approve_checkin(db, s, staff_actor(user))
+            msg = f"{s.student.public_name} is checked in."
+        elif action == "deny":
+            sessions.deny_checkin(db, s, staff_actor(user))
+            msg = "Denied."
+        else:
+            raise HTTPException(404, "Unknown action.")
+    except UserError as e:
+        db.rollback()
+        return RedirectResponse(f"/admin/checkins?msg={e.message}", status_code=303)
+    return _done(db, f"/admin/checkins?msg={msg}")

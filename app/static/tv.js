@@ -44,14 +44,14 @@
     if (m.status === 'on_hold') {
       who.appendChild(el('b', '', m.user)); phone(m.user_phone);
       det.textContent = (m.hold_kind === 'setup' ? 'Setup' : 'Tools') + ' inside \u00b7 until ' + String(m.hold_until).replace(':00', '');
-    } else if (m.user) {
+    } else if (m.user && m.status !== 'reserved') {
       who.appendChild(el('b', '', m.user)); phone(m.user_phone);
       det.textContent = 'Since ' + (m.since || '') + (m.open_ended ? ' \u00b7 nobody booked next' : '');
     } else if (m.status === 'available') {
       who.appendChild(el('b', '', shopOpen ? 'Open now' : 'Shop closed')); det.textContent = m.free_label || '';
     } else if (m.status === 'reserved') {
-      who.appendChild(el('b', '', 'Held for a booking'));
-      det.textContent = m.next_reservation ? 'Starts ' + m.next_reservation : (m.available_at ? 'Free ~' + m.available_at : '');
+      who.appendChild(el('b', '', m.user ? m.user : 'Held for a booking')); if (m.user) phone(m.user_phone);
+      det.textContent = m.user ? (m.reason || '') : (m.next_reservation ? 'Starts ' + m.next_reservation : (m.available_at ? 'Free ~' + m.available_at : ''));
     } else { who.appendChild(el('b', '', m.reason || 'Not available')); }
     mid.appendChild(who);
     if (det.textContent) mid.appendChild(det);
@@ -63,7 +63,7 @@
     r.appendChild(mid);
     var rt = el('div', 'rt');
     rt.appendChild(el('div', 'badge', (!shopOpen && m.status === 'available') ? 'Closed' : m.label));  // text label: colour is never the only signal
-    if (m.user && m.status !== 'on_hold') {
+    if (m.user && (m.status === 'in_use' || m.status === 'overdue')) {
       var bn = el('div', 'big-num');
       if (m.status === 'overdue') { bn.textContent = '+' + m.overdue_minutes + ' min'; bn.appendChild(el('small', '', 'Overdue by')); }
       else if (m.open_ended) { bn.textContent = fmtMin(m.remaining_minutes); bn.appendChild(el('small', '', 'Open-ended')); }

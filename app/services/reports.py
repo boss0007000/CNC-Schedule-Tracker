@@ -14,6 +14,9 @@ from app.models import (
 from app.services import shop
 
 
+REAL_STATUSES = ("active", "closed", "auto_closed", "force_closed")  # pending/denied/expired requests are not machine use
+
+
 def range_bounds(start: date, end: date) -> tuple[datetime, datetime]:
     """[start, end] inclusive local dates -> UTC [from, to)."""
     return clock.local_dt(start, datetime.min.time()), clock.local_dt(end + timedelta(days=1), datetime.min.time())
@@ -42,6 +45,7 @@ def utilization(db: Session, start: date, end: date) -> list[dict]:
     for m in db.scalars(select(Machine).where(Machine.active.is_(True)).order_by(Machine.sort_order, Machine.name)):
         used = sum(_overlap_h(s.checked_in_at, s.checked_out_at or now, f, t) for s in db.scalars(
             select(ShopSession).where(ShopSession.machine_id == m.id, ShopSession.checked_in_at < t,
+                                      ShopSession.status.in_(REAL_STATUSES),
                                       (ShopSession.checked_out_at.is_(None)) | (ShopSession.checked_out_at > f))))
         down = sum(_overlap_h(r.opened_at, r.closed_at or now, f, t) for r in db.scalars(
             select(MaintenanceRecord).where(MaintenanceRecord.machine_id == m.id, MaintenanceRecord.kind != "scheduled",
@@ -127,6 +131,7 @@ def student_history(db: Session, email: str, start: date, end: date) -> dict | N
         return None
     f, t = range_bounds(start, end)
     sess = db.scalars(select(ShopSession).where(ShopSession.student_id == stu.id, ShopSession.checked_in_at >= f,
+                                                ShopSession.status.in_(REAL_STATUSES),
                                                 ShopSession.checked_in_at < t)).all()
     res = db.scalars(select(Reservation).where(Reservation.student_id == stu.id, Reservation.start_at >= f,
                                                Reservation.start_at < t)).all()

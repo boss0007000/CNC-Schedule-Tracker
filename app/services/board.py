@@ -94,7 +94,7 @@ def tv_payload(db: Session, now: datetime | None = None) -> dict:
             "label": st.label, "user": st.current_user, "remaining_minutes": st.remaining_minutes,
             "overdue_minutes": st.overdue_minutes, "next_reservation": _t(st.next_reservation_start),
             "available_at": _t(st.estimated_available_at) if st.status in ("in_use", "overdue", "reserved") else None,
-            "reason": st.reason if st.status in ("under_maintenance", "awaiting_inspection", "on_hold") or st.open_ended else None})
+            "reason": st.reason if st.status in ("under_maintenance", "awaiting_inspection", "on_hold", "reserved") or st.open_ended else None})
     return {
         "server_time": now.isoformat(), "updated_label": _t(now), "shop_open": is_open,
         "hours_label": shop.day_label(db, clock.to_local(now).date()) if w else "Closed today",
@@ -122,6 +122,7 @@ def admin_overview(db: Session, now: datetime | None = None) -> dict:
                         .order_by(Reservation.start_at)).all()
     pending = db.scalar(select(func.count()).select_from(Project).where(Project.status == PROJECT_SUBMITTED)) or 0
     from app.models import MachineHold
+    waiting_checkins = db.scalar(select(func.count()).select_from(ShopSession).where(ShopSession.status == "pending")) or 0
     active_holds = db.scalars(select(MachineHold).where(MachineHold.released_at.is_(None), MachineHold.expires_at > now)
                               .order_by(MachineHold.expires_at)).all()
     expired_holds = db.scalars(select(MachineHold).where(MachineHold.release_reason == "expired",
@@ -130,4 +131,4 @@ def admin_overview(db: Session, now: datetime | None = None) -> dict:
     overdue = [s for s in active if now > s.expected_end_at]
     return {"board": status.board(db, now), "active": active, "flagged": flagged, "todays": todays,
             "pending": pending, "overdue": overdue,
-            "holds": active_holds, "expired_holds": expired_holds}
+            "waiting_checkins": waiting_checkins, "holds": active_holds, "expired_holds": expired_holds}

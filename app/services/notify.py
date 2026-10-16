@@ -225,3 +225,14 @@ def closing_prompt(db: Session, s) -> None:
                   f"Hi {s.student.first_name},\n\nThe shop is closing soon. One tap to tell everyone what you're leaving in the "
                   f"{s.machine.name}:\n  • Cleared out (nothing staying)\n  • Only my tools are in it: do not touch\n  • A setup is in it: do not touch\n\n"
                   f"{session_link(s.id)}\n\nThis lets others know not to disturb your work. Holds last a limited number of open days.\n\n— {_shop(db)}")
+
+
+def checkin_waiting(db: Session, s) -> None:
+    """Tell the supervisor on duty (or all supervisors if nobody is scheduled) that someone is waiting."""
+    from app.services import shop
+    sup = shop.supervisor_on_duty(db, clock.now())
+    to = [sup.email] if sup and sup.email else staff_recipients(db)
+    for addr in to:
+        emailer.queue(db, addr, f"Check-in waiting: {s.student.public_name} on {s.machine.name}",
+                      f"{s.student.full_name} is at the shop and checked in to the {s.machine.name}. Please confirm they are "
+                      f"authorized (one tap): {get_config().base_url}/admin/checkins")
