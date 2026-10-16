@@ -570,3 +570,43 @@ def test_cancellation_also_offers_early_start_to_next_student(db, w):
     rs.cancel(db, gone, actor="staff:sam", by_staff=True, quiet=True)
     emailer.flush_outbox(db)
     assert any(m["to"] == w.alex.email and "free right now" in m["subject"] for m in emailer.SENT)
+
+
+# ============================================================ access list = authorization; clearer reserve page
+def test_access_list_alone_authorizes_a_machine_marked_requires_training(db, w):
+    riley = student(db, "riley")  # approved list, NO certification record
+    assert machine(db, MM1).requires_certification
+    a = make_approval(db, riley, [MM1])
+    book(db, riley, a, MM1, at(1, 10))  # works: the list is the authorization
+
+
+def test_individual_certifications_can_still_be_required_on_top(db, w):
+    riley = student(db, "riley")
+    a = make_approval(db, riley, [MM1])
+    shop_settings.set_value(db, "require_certifications", True)
+    assert err(db, riley, a, MM1, at(1, 10)).code == "cert_missing"
+    certify(db, riley, group="CNC Mills")
+    book(db, riley, a, MM1, at(1, 10))
+
+
+def test_without_access_lists_certifications_are_the_gate(db, w):
+    riley = student(db, "riley")
+    a = make_approval(db, riley, [MM1])
+    shop_settings.set_value(db, "require_access_list", False)
+    assert err(db, riley, a, MM1, at(1, 10)).code == "cert_missing"
+
+
+def test_reserve_page_jumps_to_times_and_always_says_why_nothing_is_shown(client, db, w):
+    verify_student(client, w.sam.email, "Sam Patel", "sophomore")
+    page = client.get("/reserve").text
+    assert 'action="/reserve#times"' in page and 'id="times"' in page
+    day = clock.to_local(at(1, 10)).date()
+    a = make_approval(db, w.sam, [MM1])
+    certify(db, w.sam, group="CNC Mills")
+    db.commit()
+    ok = client.get(f"/reserve?approval={a.number}&machine={machine(db, MM1).id}&date={day}").text
+    assert "Step 2: choose a time" in ok and ok.count('name="start"') == 14  # a certification-flagged machine just works
+    clock.freeze(at(0, 22, 30))  # after closing: today has nothing left, and the page must say so
+    today = clock.to_local(clock.now()).date()
+    none = client.get(f"/reserve?approval={a.number}&machine={machine(db, MM1).id}&date={today}").text
+    assert "no open times left today" in unescape(none)

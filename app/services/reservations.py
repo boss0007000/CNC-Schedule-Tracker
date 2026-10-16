@@ -161,7 +161,9 @@ def validate(db: Session, student: Student, approval_number: str | None, machine
             raise UserError(f"A single session can be at most {cap_h:g} hours. Book a second session after it if you "
                             f"need more.", code="too_long")
         # 3. certification (hard block)
-        if machine.requires_certification:
+        # Being on the access list that allows the machine IS the authorization. Individual certification records are only
+        # enforced when the shop turns on `require_certifications` (or when the access list requirement is switched off).
+        if machine.requires_certification and (cfg.require_certifications or not cfg.require_access_list):
             valid, expired = find_certification(db, student.id, machine, end)
             if valid is None:
                 grp = f" or {machine.group.name}" if machine.group else ""
@@ -283,6 +285,9 @@ def slots_for(db: Session, student: Student, approval_number: str, machine_id: i
                 first_error = first_error or ex
     if not any(s["state"] == "open" for s in out["slots"]) and first_error:
         out["error"], out["code"] = first_error.message, first_error.code
+    elif not out["slots"]:
+        when = "today" if d == clock.to_local(now).date() else d.strftime("%A %b %d")
+        out["error"], out["code"] = (f"There are no open times left {when}. Try another date.", "none_left")
     out["needs_contact"] = bool(out["slots"]) and not (student.phone and student.phone_ack_at)
     if out["slots"] and not out["needs_waiver"]:
         out["needs_waiver"] = not has_waiver(db, student.id, cfg.waiver_version)

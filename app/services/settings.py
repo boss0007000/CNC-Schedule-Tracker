@@ -18,7 +18,8 @@ DEFAULTS: dict[str, object] = {
     "slot_minutes": 60,
     "max_session_hours_standard": 6,  # longest single session for students on the approved list
     "max_session_hours_advanced": 12,  # ... for students with extended access
-    "require_access_list": True,  # students must be on a staff-managed list to book
+    "require_access_list": True,
+    "require_certifications": False,  # also require individual certification records (the access lists already authorize)  # students must be on a staff-managed list to book
     "max_reservations_per_week": 0,  # 0 = no limit (project approval already gates use)
     "max_hours_per_week": 0,  # 0 = no limit
     "max_advance_days": 14,
@@ -59,6 +60,7 @@ SETTING_META: list[tuple[str, str, str]] = [
     ("collect_student_id", "bool", "Collect student ID (privacy: off by default)"),
     ("slot_minutes", "int", "Slot length (minutes)"),
     ("require_access_list", "bool", "Students must be on an access list to book"),
+    ("require_certifications", "bool", "ALSO require individual certification records on machines marked 'requires training'"),
     ("max_session_hours_standard", "float", "Longest single session: approved list (hours)"),
     ("max_session_hours_advanced", "float", "Longest single session: extended access (hours)"),
     ("max_reservations_per_week", "int", "Max reservations per student per week (0 = no limit)"),

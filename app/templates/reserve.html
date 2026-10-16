@@ -5,7 +5,7 @@
 <h1>Reserve a machine</h1>
 <p class="muted">Signed in as {{ student.full_name }}. You need an approved project and a current certification for the machine.</p>
 {{ errors(errs) }}
-<form method="get" action="/reserve" class="card">
+<form method="get" action="/reserve#times" class="card">
   <label for="ap">Approval number</label>
   <input id="ap" name="approval" type="text" list="aplist" value="{{ approval }}" aria-label="APR-2026-0042" placeholder="APR-2026-0042" autocapitalize="characters" autocomplete="off" required>
   <datalist id="aplist">{% for a in approvals %}<option value="{{ a.number }}">{{ a.project.title }}</option>{% endfor %}</datalist>
@@ -18,7 +18,9 @@
   <p class="help">You can book up to {{ cfg.max_advance_days }} days ahead.</p>
   <button class="block" type="submit">Show available times</button>
 </form>
+<div id="times" tabindex="-1"></div>
 {% if result %}
+<h2>Step 2: choose a time</h2>
   {% if result.error %}<div class="errors" role="alert">{{ result.error }}</div>{% endif %}
   {% if result.slots %}
   <form method="post" action="/reserve" class="card">

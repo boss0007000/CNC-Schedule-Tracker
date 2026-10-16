@@ -71,6 +71,7 @@ Data model: [docs/data-model.md](docs/data-model.md). Security review: [docs/sec
 * **Hours** default to Mon-Fri 8 AM-10 PM (editable). A student may keep working past their slot when nobody is booked next and the shop is open; that time never counts toward any cap, and the session only becomes overdue when the next booking starts or the shop closes.
 * **Uploads:** every project needs at least one CAD file (STEP/STP, STL or DXF); PDFs and images are optional extras. CAD files are validated by content (not the browser's reported type). Limit 10 MB per file, adjustable with MAX_UPLOAD_MB.
 * **Supervisor check-in:** every student check-in must be approved by a supervisor (Admin > Check-ins); supervisors/admins checking themselves in are exempt. Setting: require_supervisor_checkin.
+* **Certification:** being on the access list that allows a machine is the authorization. Individual certification records are only enforced if you tick "also require individual certifications" in Settings.
 * **Access:** two staff-managed lists (approved: sessions up to 6 h, standard machines; super approved: up to 12 h, all student-bookable machines). Staff-run machines accept project submissions only. The 12-hour figure is a setting (you mentioned 14 earlier).
 * **Holds:** "setup" or "tools only" left in a machine blocks others for a capped number of open days (3 / 1), with daily reminders and a closing-time prompt.
 * **Phone numbers** are required to reserve and are displayed on the schedule page and TV (see docs/security-review.md).

@@ -23,6 +23,7 @@ def world(db, demo):
     alex, jordan = student(db, "alex"), student(db, "jordan")
     a_alex = db.scalar(select(Approval).where(Approval.student_id == alex.id))
     a_jordan = db.scalar(select(Approval).where(Approval.student_id == jordan.id))
+    shop_settings.set_value(db, "require_certifications", True)  # these tests exercise certification records
     db.commit()
     return type("W", (), dict(alex=alex, jordan=jordan, a_alex=a_alex, a_jordan=a_jordan))
 

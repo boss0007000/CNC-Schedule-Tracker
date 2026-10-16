@@ -113,14 +113,15 @@ def authorization_summary(db: Session, s: ShopSession) -> dict:
     """What a supervisor is confirming when they approve."""
     r, st, m = s.reservation, s.student, s.machine
     cfg = shop_settings.load(db)
-    cert, expired = reservations.find_certification(db, st.id, m, clock.now()) if m.requires_certification else (None, None)
+    cert_required = m.requires_certification and (cfg.require_certifications or not cfg.require_access_list)
+    cert, expired = reservations.find_certification(db, st.id, m, clock.now()) if cert_required else (None, None)
     lvl = access.effective_level(db, st)
     return {
         "approval": r.approval.number if r and r.approval else None,
         "project": r.approval.project.title if r and r.approval else None,
         "covers": bool(r and r.approval and m.id in r.approval.machine_ids),
-        "cert_required": m.requires_certification,
-        "cert_ok": (cert is not None) if m.requires_certification else True,
+        "cert_required": cert_required,
+        "cert_ok": (cert is not None) if cert_required else True,
         "cert_expires": cert.expires_at if cert else None,
         "on_list": lvl is not None, "machine_ok": access.machine_allows(lvl, m),
         "waiver": reservations.has_waiver(db, st.id, cfg.waiver_version),

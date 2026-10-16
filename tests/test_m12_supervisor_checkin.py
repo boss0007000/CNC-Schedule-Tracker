@@ -182,6 +182,8 @@ def test_authorization_summary_shows_what_the_supervisor_confirms(db, w):
     r, s = arrive(db, w)
     a = sessions.authorization_summary(db, s)
     assert a["approval"] == w.a.number and a["covers"] and a["on_list"] and a["machine_ok"] and a["cert_ok"] and a["waiver"]
+    assert a["cert_required"] is False  # the access list is the authorization by default
+    shop_settings.set_value(db, "require_certifications", True)
     from app.models import Certification
     for c in db.scalars(select(Certification).where(Certification.student_id == w.alex.id)):
         c.revoked_at = clock.now()
