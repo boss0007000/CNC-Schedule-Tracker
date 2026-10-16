@@ -60,3 +60,42 @@ body{background-image:linear-gradient(rgba(56,214,255,.045) 1px,transparent 1px)
 [hidden]{display:none!important}
 /* landscape TVs: cards flow in two columns */
 @media (min-aspect-ratio:1/1){.grid{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr}.drift{padding:1.2vh 1.6vw}.qr{flex-direction:row;text-align:left}.qr img{width:9vh;height:9vh}.brand h1{font-size:4.4vh}.time{font-size:6vh}}
+
+.mqr{display:flex;flex-direction:column;align-items:center;gap:.2vh;flex:none}.mqr img{width:5.4vh;height:5.4vh;background:#fff;padding:.3vh;border-radius:.5vh}.mqr span{font-size:1vh;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+.tag{font-size:1.2vh;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);border:1px solid var(--cyan);border-radius:.5vh;padding:.2vh .6vw;white-space:nowrap}
+.s-on_hold{--c:var(--insp)}
+.seg.hold{background:repeating-linear-gradient(135deg,var(--insp) 0 .8vh,#5a3a8a .8vh 1.6vh)}
+.lg.hold{background:var(--insp)}
+.ph{color:var(--text);font-weight:700;margin-left:.8vw;white-space:nowrap}
+.nx{font-size:1.45vh;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.nx b{color:var(--text)}
+
+/* v3 card layout: name / who+phone / detail on the left, QR + badge-over-number on the right */
+.mid{flex:1 1 0;min-width:0}
+.name{font-size:2.4vh}
+.who{font-size:1.9vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25}
+.who b{margin-right:.8vw}
+.ph{margin-left:0;font-size:1.9vh}
+.det{font-size:1.5vh;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rt{display:flex;flex-direction:column;align-items:flex-end;gap:.3vh;flex:none}
+.rt .badge{min-width:0;font-size:1.9vh;padding:.2vh .8vw}
+.rt .big-num{font-size:2.5vh}.rt .big-num small{font-size:1vh}
+.mqr img{width:5vh;height:5vh}
+.legend{flex-wrap:wrap;font-size:1.25vh;gap:.4vh 1.2vw}
+.top .brand h1{white-space:nowrap}.meta{flex-wrap:wrap;row-gap:0}
+.qr img{width:6.4vh;height:6.4vh}.qrs{padding:.5vh 1vw}.qr b{font-size:1.5vh}.qr span{font-size:1.1vh}
+.nx{display:none}
+
+/* v4: fit five cards with a detail line in portrait */
+.meta{flex-wrap:nowrap;font-size:1.5vh}.brand h1{font-size:3vh}.eyebrow{font-size:1.1vh}
+.time{font-size:3.6vh}.date{font-size:1.4vh}.top{align-items:center}
+.code{padding:.2vh 2vw}.big{font-size:4vh;letter-spacing:.8vh}.k{font-size:1.2vh}.k2{font-size:1.2vh}
+.chip{padding:.1vh .8vw}.chip b{font-size:2.1vh}.chip span{font-size:1.1vh}
+.legend{flex-wrap:nowrap;font-size:1.15vh;gap:1vw}.lg{height:1.1vh;width:2vh}
+.qr span{display:none}.qr img{width:6vh;height:6vh}.qrs{padding:.4vh 1vw;gap:.6vw}.qr b{font-size:1.5vh}
+.card .body{padding:.4vh 1.4vw}
+.tl{height:1.8vh}.ticks{height:1.5vh}.tick{font-size:1.25vh}
+@media (min-aspect-ratio:1/1){.qr span{display:block}}
+.who{display:flex;flex-wrap:wrap;column-gap:.8vw;white-space:normal;overflow:visible}.who b{margin-right:0}.ph{white-space:nowrap}
+.det{white-space:normal;overflow:visible}
+.s-on_hold .rt .badge{font-size:1.55vh}.s-under_maintenance .rt .badge{font-size:1.7vh}
+.s-on_hold .rt .badge{font-size:1.35vh;padding:.2vh .5vw;letter-spacing:.01em}.s-on_hold .who,.s-on_hold .ph{font-size:1.7vh;flex-wrap:nowrap}.s-on_hold .mqr img{width:4.4vh;height:4.4vh}

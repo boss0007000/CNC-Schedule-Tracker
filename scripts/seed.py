@@ -12,7 +12,7 @@ from sqlalchemy import delete, select
 from app import clock, db as dbm
 from app.config import get_config
 from app.models import (
-    Approval, ApprovalMachine, ApprovalRestriction, Base, Certification, Location, Machine, MachineGroup,
+    AccessRoster, Approval, ApprovalMachine, ApprovalRestriction, Base, Certification, Location, Machine, MachineGroup,
     Project, ProjectRevision, SafetyWaiver, ShiftSchedule, ShopHours, StaffUser, Student,
 )
 from app.services import numbers, staffauth
@@ -44,6 +44,8 @@ def seed_demo(db) -> dict:
                     description="Demo machine - edit in Admin > Machines")
         db.add(m)
         machines[name] = m
+    for name, level in [("Haas VF-3", "advanced"), ("Haas ST-10", "advanced"), ("Fibercell FC50", "staff_only")]:
+        machines[name].access_level = level
     db.flush()
 
     staff = {
@@ -51,24 +53,29 @@ def seed_demo(db) -> dict:
         "sam": staffauth.create_user(db, "sam", DEMO_PASSWORD, "supervisor", "Sam Supervisor", "sam@example.edu"),
         "mo": staffauth.create_user(db, "mo", DEMO_PASSWORD, "monitor", "Mo Monitor", "mo@example.edu"),
     }
-    # Supervisor on duty Mon-Fri 08:00-18:00 for the next 3 weeks.
+    # Supervisor on duty Mon-Fri 08:00-22:00 for the next 3 weeks.
     today = clock.to_local(clock.now()).date()
     for i in range(21):
         d = today + timedelta(days=i)
         if d.weekday() < 5:
             db.add(ShiftSchedule(location_id=1, staff_id=staff["sam"].id,
-                                 start_at=clock.local_dt(d, time(8)), end_at=clock.local_dt(d, time(18))))
+                                 start_at=clock.local_dt(d, time(8)), end_at=clock.local_dt(d, time(22))))
 
     students = {}
+    phones = {"alex": "+15305550101", "jordan": "+15305550102", "sam": "+15305550103", "riley": "+15305550104"}
     for email, name, standing, course in [
         ("alex.rivera@csuchico.edu", "Alex Rivera", "junior", "ME 250"),
         ("jordan.lee@csuchico.edu", "Jordan Lee", "senior", "MECH 480"),
         ("sam.patel@csuchico.edu", "Sam Patel", "sophomore", "ENGR 110"),
         ("riley.chen@csuchico.edu", "Riley Chen", "graduate", "MSE 600"),
     ]:
-        s = Student(email=email, full_name=name, standing=standing, course=course)
+        key = email.split(".")[0]
+        s = Student(email=email, full_name=name, standing=standing, course=course, phone=phones[key],
+                    phone_ack_at=clock.now())  # demo numbers (555-01xx) are fictional
         db.add(s)
-        students[email.split(".")[0]] = s
+        students[key] = s
+    for key, level in {"alex": "super_approved", "jordan": "super_approved", "sam": "approved", "riley": "approved"}.items():
+        db.add(AccessRoster(email=students[key].email, level=level, added_by="seed"))
     db.flush()
     now = clock.now()
     for s in students.values():

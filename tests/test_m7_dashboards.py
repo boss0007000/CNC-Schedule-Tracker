@@ -372,7 +372,7 @@ def test_tv_timeline_segments_are_anonymous_and_correct(client, db, demo):
     db.commit()
     d = client.get("/tv/data").json()
     w = d["window"]
-    assert w["end"] - w["start"] == 10 * 3600 and w["start"] <= w["now"] <= w["end"] and len(w["ticks"]) >= 5
+    assert w["end"] - w["start"] == 14 * 3600 and w["start"] <= w["now"] <= w["end"] and len(w["ticks"]) >= 5
     m = next(x for x in d["machines"] if x["name"] == "Haas Mini Mill 1")
     kinds = {(s["k"], s["s"], s["e"]) for s in m["timeline"]}
     assert ("inuse", int(at(0, 11).timestamp()), int(at(0, 12).timestamp())) in kinds

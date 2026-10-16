@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Your {{ 'setup' if h.kind == 'setup' else 'tools' }} in the {{ h.machine.name }}</h1>
+<div class="card"><dl class="kv"><dt>Marked</dt><dd>{{ h.started_at|local }}</dd><dt>Held until</dt><dd>{{ h.expires_at|local }}</dd>
+<dt>Status</dt><dd>{% if open %}Marked: do not touch{% else %}Cleared ({{ h.release_reason }}){% endif %}</dd></dl></div>
+{% if open %}<form method="post" action="/hold/{{ h.id }}/release"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="t" value="{{ t }}">
+<button class="block" type="submit">I've cleared it out</button></form>
+<p class="help">Still working on it? Nothing to do. Come back and use the machine as usual (book a time first if you'll be long). The hold ends on the date above.</p>{% endif %}
+{% endblock %}

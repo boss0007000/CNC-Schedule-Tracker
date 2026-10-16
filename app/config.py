@@ -40,6 +40,7 @@ class Config(BaseSettings):
     scheduler_enabled: bool = True
     bootstrap_admin_username: str = ""  # create first admin on boot if no staff exist
     bootstrap_admin_password: str = ""
+    bootstrap_reset: bool = False  # recovery: on boot, (re)set that admin's password, unlock and re-enable it
 
     def validate_for_prod(self) -> None:
         """Fail fast on unsafe production configuration."""

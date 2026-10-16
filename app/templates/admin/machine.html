@@ -4,7 +4,13 @@
 <h1>{{ m.name }}</h1>
 {% if msg %}<div class="notice" role="status">{{ msg }}</div>{% endif %}
 <p>Status now: <span class="pill s-{{ state.status }}">{{ state.label }}</span>{% if state.reason %} — {{ state.reason }}{% endif %} · maintenance flag: <strong>{{ m.maintenance_state|replace('_',' ') }}</strong>{% if m.override_status %} · manual override by {{ m.override_by }}{% endif %}</p>
+{% if hold %}<div class="errors"><strong>{{ 'Setup' if hold.kind == 'setup' else 'Tools' }} hold</strong> by {{ hold.student.full_name }} ({{ hold.student.phone|pretty_phone or 'no number' }}) until {{ hold.expires_at|local }}.
+{% if staff.role != 'monitor' %}<form class="inline" method="post" action="/admin/holds/{{ hold.id }}/release" data-confirm="Release this hold?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small danger">Release</button></form>
+<form class="inline" method="post" action="/admin/holds/{{ hold.id }}/extend"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input class="sm w9" type="number" name="days" min="1" max="10" value="1" aria-label="Open days to extend"><button class="small secondary">Extend (open days)</button></form>{% endif %}</div>{% endif %}
 {% if staff.role != 'monitor' %}
+{% if not hold %}<form method="post" action="/admin/hold-place/{{ m.id }}" class="card toolbar"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div><label for="he">Place a hold for a student (email)</label><input id="he" type="email" name="email" required></div>
+<div><label for="hk">What's staying</label><select id="hk" name="kind"><option value="setup">Setup: do not touch</option><option value="tools">Tools only: do not touch</option></select></div><button>Place hold</button></form>{% endif %}
 <div class="grid2">
 <form method="post" action="/admin/machines/{{ m.id }}/override" class="card"><h2>Manual status override</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label for="os">Force status</label><select id="os" name="status"><option value="">(none: derive automatically)</option>{% for s in statuses %}<option value="{{ s }}" {% if m.override_status == s %}selected{% endif %}>{{ s|replace('_',' ')|title }}</option>{% endfor %}</select>
@@ -17,6 +23,9 @@
 <button class="block">Log</button></form></div>
 {% if m.maintenance_state != 'none' %}<form method="post" action="/admin/machines/{{ m.id }}/clear" class="card"><h2>Inspection clearance</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label for="cn">Note</label><input id="cn" name="note"><button class="block">Clear and return to service</button></form>{% endif %}
 {% endif %}
+<h2>Hold history</h2>
+<div class="tablewrap"><table><tr><th>From</th><th>Student</th><th>What</th><th>Until</th><th>Ended</th></tr>
+{% for h in hold_hist %}<tr><td>{{ h.started_at|local }}</td><td>{{ h.student.full_name }}</td><td>{{ h.kind }}</td><td>{{ h.expires_at|local }}</td><td>{{ h.released_at|local }} {{ '(' ~ h.release_reason ~ ')' if h.release_reason else '' }}</td></tr>{% else %}<tr><td colspan="5">None.</td></tr>{% endfor %}</table></div>
 <h2>Maintenance log</h2>
 <div class="tablewrap"><table><tr><th>Opened</th><th>Type</th><th>Description</th><th>By</th><th>Closed</th><th></th></tr>
 {% for r in records %}<tr><td>{{ r.opened_at|local }}</td><td>{{ r.kind }}{% if r.window_start %}<br>{{ r.window_start|local }} → {{ r.window_end|local }}{% endif %}</td><td>{{ r.description }}</td><td>{{ r.opened_by }}</td><td>{{ r.closed_at|local }}</td>

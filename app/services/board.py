@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import clock
 from app.models import Reservation, ShopSession
-from app.services import qr, rotcode, shop, status
+from app.services import contact, qr, rotcode, shop, status
 from app.services import settings as shop_settings
 
 
@@ -23,7 +23,7 @@ def _timeline(db: Session, rows, now: datetime) -> tuple[dict, dict]:
     """Today's per-machine timeline (public-safe: no names). Returns (window, {machine_id: [segments]})."""
     from datetime import time as dtime
     today = clock.to_local(now).date()
-    w = shop.hours_for_date(db, today) or (clock.local_dt(today, dtime(8)), clock.local_dt(today, dtime(18)))
+    w = shop.hours_for_date(db, today) or (clock.local_dt(today, dtime(8)), clock.local_dt(today, dtime(22)))
     w0, w1 = w
     grace = timedelta(minutes=shop_settings.load(db).checkin_grace_minutes)
     ids = [m.id for m, _ in rows]
@@ -42,6 +42,10 @@ def _timeline(db: Session, rows, now: datetime) -> tuple[dict, dict]:
     for m, st in rows:
         if st.status in ("under_maintenance", "awaiting_inspection"):
             segs[m.id] = [{"s": ep(w0), "e": ep(w1), "k": "down"}]
+        elif st.status == "on_hold":
+            segs[m.id] = [{"s": ep(w0), "e": ep(w1), "k": "hold"}]
+        elif st.open_ended and now < w1:  # keep going: nobody is booked next
+            segs[m.id].append({"s": ep(max(now, w0)), "e": ep(min(st.estimated_available_at or w1, w1)), "k": "inuse"})
     span = (w1 - w0).total_seconds() / 3600
     step = 1 if span <= 6 else 2
     ticks, t = [], w0
@@ -68,12 +72,19 @@ def tv_payload(db: Session, now: datetime | None = None) -> dict:
             nxt = st.next_reservation_start
             free_label = f"Free until {_t(nxt)}" if nxt else "Free for the rest of the day"
         machines.append({"timeline": sorted(segs[m.id], key=lambda x: x["s"]), "free_label": free_label,
-                         "since": _t(st.since),
+                         "since": _t(st.since), "open_ended": st.open_ended,
+                         "user_phone": contact.pretty(st.current_phone) if (cfg.tv_show_phone and st.current_user) else None,
+                         "next_user": st.next_user,
+                         "next_phone": contact.pretty(st.next_phone) if (cfg.tv_show_phone and st.next_user) else None,
+                         "hold_kind": st.hold_kind,
+                         "hold_until": clock.to_local(st.hold_until).strftime("%a %I:%M %p").replace(" 0", " ") if st.hold_until else None,
+                         "staff_run": m.access_level == "staff_only",
+                         "qr": f"/qr/machine/{m.id}.png",
             "id": m.id, "name": m.name, "group": m.group.name if m.group else None, "status": st.status,
             "label": st.label, "user": st.current_user, "remaining_minutes": st.remaining_minutes,
             "overdue_minutes": st.overdue_minutes, "next_reservation": _t(st.next_reservation_start),
             "available_at": _t(st.estimated_available_at) if st.status in ("in_use", "overdue", "reserved") else None,
-            "reason": st.reason if st.status in ("under_maintenance", "awaiting_inspection") else None})
+            "reason": st.reason if st.status in ("under_maintenance", "awaiting_inspection", "on_hold") or st.open_ended else None})
     return {
         "server_time": now.isoformat(), "updated_label": _t(now), "shop_open": is_open,
         "hours_label": shop.day_label(db, clock.to_local(now).date()) if w else "Closed today",
@@ -100,6 +111,13 @@ def admin_overview(db: Session, now: datetime | None = None) -> dict:
                                                   Reservation.status != "cancelled")
                         .order_by(Reservation.start_at)).all()
     pending = db.scalar(select(func.count()).select_from(Project).where(Project.status == PROJECT_SUBMITTED)) or 0
+    from app.models import MachineHold
+    active_holds = db.scalars(select(MachineHold).where(MachineHold.released_at.is_(None), MachineHold.expires_at > now)
+                              .order_by(MachineHold.expires_at)).all()
+    expired_holds = db.scalars(select(MachineHold).where(MachineHold.release_reason == "expired",
+                                                         MachineHold.released_at > now - timedelta(days=3))
+                               .order_by(MachineHold.id.desc())).all()
     overdue = [s for s in active if now > s.expected_end_at]
     return {"board": status.board(db, now), "active": active, "flagged": flagged, "todays": todays,
-            "pending": pending, "overdue": overdue}
+            "pending": pending, "overdue": overdue,
+            "holds": active_holds, "expired_holds": expired_holds}

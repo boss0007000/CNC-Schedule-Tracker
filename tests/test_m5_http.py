@@ -28,7 +28,7 @@ def form(ctx, hour=10, day=1, **over):
 def test_reserve_page_lists_available_slots(client, ctx):
     day = clock.to_local(at(1, 10)).date().isoformat()
     r = client.get(f"/reserve?approval={ctx.approval}&machine={ctx.mm1}&date={day}")
-    assert r.status_code == 200 and r.text.count('name="start"') == 10
+    assert r.status_code == 200 and r.text.count('name="start"') == 14
 
 
 def test_reserve_page_explains_uncovered_machine(client, ctx):

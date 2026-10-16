@@ -187,9 +187,10 @@ On `/admin/users` → **Add staff user**:
 ### 5.3 Rename the shop and set the rules
 Top bar → **Settings** (`/admin/settings`). Work from top to bottom:
 
-1. **Weekly hours** → set each weekday's open/close times (24-hour format like `08:00`/`18:00`), tick **Closed** for days off → **Save hours**. (New databases start Mon–Fri 08:00–18:00.)
+1. **Weekly hours** → set each weekday's open/close times (24-hour format like `08:00`/`18:00`), tick **Closed** for days off → **Save hours**. (New databases start Mon–Fri 08:00–22:00.)
 2. **Holidays and special hours** → add each closed date or short day (date + label, tick "Closed all day" or give hours) → **Add**.
-3. **Supervisor shifts** → this is **essential**: machines marked "requires supervision" cannot be booked unless a shift covers the time. Choose the supervisor, the start and end of the first shift, and **Repeat weekly for** `26` to create half a year of identical weekly shifts → **Add shift**. Repeat for each person/pattern. You can remove or add single shifts later.
+3. **Access lists** (do this before students can book!): top bar → **Access** → paste your students' campus emails into the *Approved* list (an admin can also fill *Super approved*). Then Machines → set each machine's **Who can book it** (standard / super approved only / staff-run).
+3b. **Supervisor shifts** → this is **essential**: machines marked "requires supervision" cannot be booked unless a shift covers the time. Choose the supervisor, the start and end of the first shift, and **Repeat weekly for** `26` to create half a year of identical weekly shifts → **Add shift**. Repeat for each person/pattern. You can remove or add single shifts later.
 4. **Rules and limits** (click each field; defaults are sensible):
    - *Shop name* — shown on the site and TV.
    - *Allowed student email domain* — `csuchico.edu`.

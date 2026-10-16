@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors %}
+{% block content %}
+<h1>Anything staying in the {{ s.machine.name }}?</h1>
+{{ errors(errs) }}
+<p>One tap tells everyone, on the schedule page and the TV, so nobody disturbs your work. You can only keep a machine on hold for a limited number of open days, and we'll remind you each day.</p>
+{% if cur and cur.student_id != s.student_id %}<div class="notice">Someone else's {{ cur.kind }} is already marked in this machine; a supervisor can help.</div>{% endif %}
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="t" value="{{ t }}">
+  <button class="block" name="kind" value="clear" type="submit">Nothing is staying: it's clear</button>
+  <button class="block secondary" name="kind" value="tools" type="submit">Only my tools are in it: do not touch</button>
+  <button class="block secondary" name="kind" value="setup" type="submit">My setup is in it: do not touch</button>
+</form>
+{% endblock %}

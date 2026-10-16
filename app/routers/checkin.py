@@ -8,7 +8,7 @@ from app import clock, emailer, security
 from app.db import get_db
 from app.errors import UserError
 from app.models import Reservation, ShopSession, Student
-from app.services import lifecycle, sessions
+from app.services import contact, lifecycle, sessions
 from app.services import settings as shop_settings
 from app.web import get_form, public_post_guard, render, student_required
 
@@ -28,7 +28,8 @@ def checkin_form(request: Request, ref: str = "", student: Student = Depends(stu
                  db: Session = Depends(get_db)):
     lifecycle.lazy_sweep(db)
     active = sessions.active_session_for(db, student.id)
-    return render(request, "checkin.html", {"ref": ref, "todays": _todays(db, student), "active": active, "errs": []})
+    return render(request, "checkin.html", {"ref": ref, "todays": _todays(db, student), "active": active, "errs": [],
+                                            "student": student, "v": None})
 
 
 @router.post("/checkin")
@@ -39,6 +40,7 @@ def checkin_post(request: Request, bg: BackgroundTasks, form=Depends(get_form),
     if replay:  # double-tap / double-scan: show the original result
         return RedirectResponse(replay, status_code=303)
     try:
+        contact.apply_from_form(db, student, form)
         s = sessions.check_in(db, student, form.get("ref", ""), form.get("shop_code", ""), security.client_ip(request))
         url = f"/checkin/done/{s.id}"
         security.idem_store(db, token, "checkin", url)
@@ -47,7 +49,8 @@ def checkin_post(request: Request, bg: BackgroundTasks, form=Depends(get_form),
         (db.commit if e.persist else db.rollback)()
         return render(request, "checkin.html", {"ref": form.get("ref", ""), "todays": _todays(db, student),
                                                 "active": sessions.active_session_for(db, student.id),
-                                                "errs": [e.message]}, status=429 if e.code == "rate_limited" else 400)
+                                                "errs": [e.message], "student": student, "v": dict(form)},
+                      status=429 if e.code == "rate_limited" else 400)
     bg.add_task(emailer.flush_in_new_session)
     return RedirectResponse(url, status_code=303)
 
@@ -78,7 +81,8 @@ def checkout_post(request: Request, bg: BackgroundTasks, form=Depends(get_form),
     try:
         s = sessions.check_out(db, student, form.get("ref") or None, form.get("shop_code", ""), checklist,
                                security.client_ip(request), report_kind=form.get("report_kind", ""),
-                               report_text=form.get("report_text", ""), photo=form.get("photo"))
+                               report_text=form.get("report_text", ""), photo=form.get("photo"),
+                               leave_state=form.get("leave_state", ""))
         url = f"/checkout/done/{s.id}"
         security.idem_store(db, token, "checkout", url)
         db.commit()

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors, csrf %}
+{% block content %}
+<h1>Ask about a time change</h1>
+{{ errors(errs) }}
+<div class="card"><strong>{{ t.machine.name }}</strong><br>{{ t.student.public_name }} is booked {{ t.start_at|local }} – {{ t.end_at|localtime }}.</div>
+<p>You can politely ask whether they could move to another time so you can use the machine. They get an email and can say yes or no with one tap. If they say no, nothing happens. If you can't agree, a shop supervisor decides, not students.</p>
+{% if options %}
+<form method="post" action="/requests/new" class="card">
+  {{ csrf() }}<input type="hidden" name="res" value="{{ t.id }}">
+  <fieldset class="slots-set"><legend>A time that would work for them</legend>
+    <div class="slots">{% for s, e in options %}<label><input type="radio" name="start" value="{{ s.isoformat() }}" required><span>{{ s|local('%a %b %d') }}<br>{{ s|localtime }}–{{ e|localtime }}</span></label>{% endfor %}</div>
+  </fieldset>
+  <label for="n">Short note <span class="muted">(optional)</span></label>
+  <input id="n" name="note" type="text" maxlength="200" value="{{ note }}" placeholder="Thanks for considering it!">
+  <p class="help">No need to explain why you need it. Please don't pressure anyone.</p>
+  <button class="block" type="submit">Send request</button>
+</form>
+{% else %}<div class="notice">There's no other open time that works for them right now. You can join the waiting list on the reserve page, or ask a shop supervisor.</div>{% endif %}
+<p><a href="javascript:history.back()">← Back</a></p>
+{% endblock %}

@@ -8,7 +8,7 @@ from app import emailer, security
 from app.db import get_db
 from app.errors import UserError
 from app.models import Approval, Project, Student
-from app.services import files, identity, notify, pdfs, projects
+from app.services import contact, files, identity, notify, pdfs, projects
 from app.web import get_form, public_post_guard, render, student_required
 
 router = APIRouter(dependencies=[Depends(public_post_guard)])
@@ -39,7 +39,9 @@ def submit_post(request: Request, bg: BackgroundTasks, form=Depends(get_form),
     if replay:
         return RedirectResponse(replay, status_code=303)
     v = _values(form)
+    v["phone"], v["ack_phone"] = form.get("phone", ""), form.get("ack_phone") == "on"
     try:
+        contact.apply_from_form(db, student, form)
         p = projects.submit(db, student, v, form.getlist("files"))
         url = f"/submit/{p.id}?new=1"
         security.idem_store(db, token, "submit", url)

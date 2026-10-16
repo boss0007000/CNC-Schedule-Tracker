@@ -259,14 +259,14 @@ def test_pages_pass_accessibility_checks(client, db, demo):
     tok = verify_student(client, "alex.rivera@csuchico.edu", "Alex Rivera")
     day = clock.to_local(at(1, 10)).date()
     a = db.scalar(select(Approval).where(Approval.number == "APR-2026-0001"))
-    for path in ("/submit", "/reserve", f"/reserve?approval={a.number}&machine=1&date={day}", "/checkin", "/checkout", "/my"):
+    for path in ("/submit", "/reserve", f"/reserve?approval={a.number}&machine=1&date={day}", "/checkin", "/checkout", "/my", "/schedule", "/machine/1"):
         audit_html(client.get(path).text, path)
     with TestClient(create_app(), base_url="http://testserver") as sc:
         staff_login(sc, "admin")
         for path in ("/admin", "/admin/approvals", "/admin/approvals/1", "/admin/reservations", "/admin/reservations?view=calendar",
                      "/admin/sessions", "/admin/machines", "/admin/machines/1", "/admin/students", "/admin/students/1",
                      "/admin/incidents", "/admin/reports", "/admin/qr", "/admin/settings", "/admin/users", "/admin/audit",
-                     "/admin/backups"):
+                     "/admin/backups", "/admin/access", "/admin/requests"):
             audit_html(sc.get(path).text, path)
 
 

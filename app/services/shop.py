@@ -50,6 +50,30 @@ def slot_grid(db: Session, d: date, slot_minutes: int, location_id: int = 1) -> 
     return out
 
 
+def nth_open_day_close(db: Session, start_day: date, n: int, location_id: int = 1) -> datetime:
+    """Closing time of the n-th OPEN day, counting start_day as day 1 if the shop is open that day.
+    (Weekends/holidays configured as closed are skipped: these are 'business days'.)"""
+    d, count, last = start_day, 0, None
+    for _ in range(120):
+        w = hours_for_date(db, d, location_id)
+        if w:
+            count, last = count + 1, w[1]
+            if count >= max(1, n):
+                return last
+        d += timedelta(days=1)
+    return last or clock.local_dt(start_day + timedelta(days=7), datetime.min.time())
+
+
+def business_day_number(db: Session, start_day: date, today: date, location_id: int = 1) -> int:
+    """Which open day (1-based) `today` is, counting from start_day."""
+    d, n = start_day, 0
+    while d <= today:
+        if hours_for_date(db, d, location_id):
+            n += 1
+        d += timedelta(days=1)
+    return n
+
+
 def supervisor_on_duty(db: Session, at: datetime, location_id: int = 1) -> StaffUser | None:
     shift = db.scalar(select(ShiftSchedule).where(ShiftSchedule.location_id == location_id,
                                                   ShiftSchedule.start_at <= at, ShiftSchedule.end_at > at)

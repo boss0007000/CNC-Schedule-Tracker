@@ -10,7 +10,7 @@ from app.models import ShiftSchedule, ShopHours, StaffUser
 from app.services import audit
 
 def ensure_base_data(db: Session) -> None:
-    """Idempotent: the default location and Mon-Fri 08:00-18:00 hours. Runs on every boot, so a brand-new
+    """Idempotent: the default location and Mon-Fri 08:00-22:00 hours. Runs on every boot, so a brand-new
     production database is usable immediately (machines reference location 1)."""
     from app.models import Location
     if db.get(Location, 1) is None:
@@ -20,7 +20,7 @@ def ensure_base_data(db: Session) -> None:
         for wd in range(7):
             weekday = wd < 5
             db.add(ShopHours(location_id=1, weekday=wd, open_time=time(8) if weekday else None,
-                             close_time=time(18) if weekday else None, closed=not weekday))
+                             close_time=time(22) if weekday else None, closed=not weekday))
         db.flush()
 
 

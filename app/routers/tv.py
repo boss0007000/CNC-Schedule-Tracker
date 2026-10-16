@@ -21,6 +21,15 @@ def tv_data(db: Session = Depends(get_db)):
     return JSONResponse(board.tv_payload(db), headers={"Cache-Control": "no-store"})
 
 
+@router.get("/qr/machine/{mid}.png")
+def qr_machine(mid: int, db: Session = Depends(get_db)):
+    from app.models import Machine
+    if db.get(Machine, mid) is None:
+        raise HTTPException(404, "Unknown machine.")
+    return Response(qr.png_for_path(f"/machine/{mid}"), media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=3600"})
+
+
 @router.get("/qr/{name}.png")
 def qr_png(name: str):
     try:

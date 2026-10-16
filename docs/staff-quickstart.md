@@ -20,6 +20,21 @@ Roles: **monitor** = read-only · **supervisor** = approvals, reservations, mach
 * **Repeated no-shows:** 3 in 30 days auto-suspends booking for 14 days. Lift it on the student page (reason required) — earlier no-shows are forgiven.
 * **Injury or near-miss:** Incidents > Record an incident (separate from damage reports).
 
+## Who may use which machine (access lists)
+* **Admin/Supervisor > Access** holds two lists: **Approved** and **Super approved**. A student must be on a list to book anything. Paste several emails at once; students never see which list anyone is on.
+* Each machine has a **"Who can book it"** setting (Admin > Machines): *everyone on a list*, *super approved only*, or *staff-run*. Staff-run machines (for example the Fibercell FC50) cannot be booked by students, who submit parts for them on the project form; you make the part.
+* Longest single session: 6 hours (approved) and 12 hours (super approved), editable in Settings. There are no weekly caps; the project approval is the gate.
+* Only an admin can add to or remove from the super approved list.
+
+## Setups and tools left in a machine
+Students mark "only my tools" or "my setup" when they check out (or from the email link sent before closing). The machine then shows **DO NOT TOUCH** with the owner's number on the schedule page and TV. Limits: setup 3 open days, tools 1 open day (Settings). Owners get a friendly reminder each open day. When it expires the machine opens up and you get an email and a dashboard flag so you can put tools aside. Machines > the machine lets you place, extend or release a hold.
+
+## Phone numbers
+Every student must give a number (with an acknowledgement) to reserve. It is shown on the schedule page to signed-in students and on the TV for the current user and the next booking. You can hide numbers on the TV with Settings > "Show phone numbers on the shop TV".
+
+## Students changing times with each other
+Students can politely ask each other to move a slot (Access/Requests page shows them). Nobody can order anyone, a "no" is never shown to others, and there is no priority setting. If two students can't agree you decide, using Reservations.
+
 ## Emergency
 Dashboard > **Emergency close** → type CLOSE. Every machine shows *Under Maintenance*, the TV goes full-screen red, active users get an email.
 Reopen from the same dashboard (tick the confirmation). Both are audited.

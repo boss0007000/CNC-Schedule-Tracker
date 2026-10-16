@@ -15,7 +15,7 @@ from datetime import timedelta
 import httpx
 
 from app import clock, db as dbm, security
-from app.models import Approval, ApprovalMachine, Certification, Machine, MachineGroup, Project, SafetyWaiver, Student
+from app.models import AccessRoster, Approval, ApprovalMachine, Certification, Machine, MachineGroup, Project, SafetyWaiver, Student
 from app.services import identity, numbers
 from sqlalchemy import select
 
@@ -30,10 +30,12 @@ def prepare(n: int) -> list[str]:
             emails.append(email)
             if s.scalar(select(Student.id).where(Student.email == email)):
                 continue
-            st = Student(email=email, full_name=f"Load Tester{i}", standing="junior")
+            st = Student(email=email, full_name=f"Load Tester{i}", standing="junior", phone=f"+1530555{i:04d}",
+                         phone_ack_at=clock.now())
             s.add(st)
             s.flush()
             s.add(SafetyWaiver(student_id=st.id, version="1"))
+            s.add(AccessRoster(email=email, level="approved", added_by="load"))
             s.add(Certification(student_id=st.id, group_id=mills.id, granted_by="load", expires_at=clock.now() + timedelta(days=300)))
             p = Project(student_id=st.id, title="load", description="load test project", status="approved",
                         machine_ids=[m.id for m in machines])

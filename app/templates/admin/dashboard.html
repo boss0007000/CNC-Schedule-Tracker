@@ -23,6 +23,10 @@
 {% if st.current_user %}<br>{{ st.current_user }}{% if st.status == 'in_use' %} · {{ st.remaining_minutes }} min left{% elif st.status == 'overdue' %} · {{ st.overdue_minutes }} min over{% endif %}{% endif %}
 {% if st.next_reservation_start %}<br><span class="muted">Next {{ st.next_reservation_start|localtime }}</span>{% endif %}</a>{% endfor %}
 </div>
+{% if holds or expired_holds %}<h2>Setups and tools left in machines</h2>
+<div class="tablewrap"><table><tr><th>Machine</th><th>Student</th><th>What</th><th>Until</th><th></th></tr>
+{% for h in holds %}<tr><td>{{ h.machine.name }}</td><td>{{ h.student.full_name }}<br><span class="muted">{{ h.student.phone|pretty_phone }}</span></td><td>{{ h.kind }}</td><td>{{ h.expires_at|local }}</td><td><a class="btn small secondary" href="/admin/machines/{{ h.machine_id }}">Manage</a></td></tr>{% endfor %}
+{% for h in expired_holds %}<tr><td>{{ h.machine.name }}</td><td>{{ h.student.full_name }}</td><td>{{ h.kind }}</td><td><strong>expired {{ h.released_at|local }}</strong></td><td>Tools/setup may still need clearing</td></tr>{% endfor %}</table></div>{% endif %}
 <h2>Active sessions</h2>
 <div class="tablewrap"><table><tr><th>Machine</th><th>Student</th><th>In</th><th>Ends</th><th>State</th></tr>
 {% for s in active %}<tr><td>{{ s.machine.name }}</td><td>{{ s.student.full_name }}</td><td>{{ s.checked_in_at|localtime }}</td><td>{{ s.expected_end_at|localtime }}</td>

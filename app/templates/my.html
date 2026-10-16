@@ -2,8 +2,27 @@
 {% block content %}
 <h1>My shop</h1>
 <p>Signed in as <strong>{{ student.full_name }}</strong> ({{ student.email }}).</p>
+{% if msg %}<div class="notice" role="status">{{ msg }}</div>{% endif %}
 {% if joined %}<div class="success">You're on the waiting list. We'll email you if the slot opens.</div>{% endif %}
 {% if suspended %}<div class="errors">Booking is paused until {{ student.suspended_until|local }}. {{ student.suspension_reason or '' }}</div>{% endif %}
+{% if my_holds or recent_machines %}<h2>Things you've left in machines</h2>
+{% for h in my_holds %}<div class="card"><strong>{{ h.machine.name }}</strong>: your {{ 'setup' if h.kind == 'setup' else 'tools' }} {{ 'is' if h.kind == 'setup' else 'are' }} marked do-not-touch until {{ h.expires_at|local }}.
+<form class="inline" method="post" action="/hold/{{ h.id }}/release"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small">I've cleared it out</button></form></div>{% endfor %}
+{% if recent_machines %}<form method="post" action="/my/hold" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label for="hm">Leaving something in a machine you just used?</label>
+<select id="hm" name="machine_id">{% for m in recent_machines %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select>
+<button class="small" name="kind" value="tools" type="submit">Only my tools: do not touch</button> <button class="small secondary" name="kind" value="setup" type="submit">My setup: do not touch</button></form>{% endif %}{% endif %}
+{% if incoming %}<h2>Someone asked about your time</h2>{% for q in incoming %}<div class="card"><strong>{{ q.requester.public_name }}</strong> asked if you could move your {{ q.target_reservation.machine.name }} time. <a class="btn small" href="/requests/{{ q.id }}">Take a look</a> <span class="muted">(optional, say no any time)</span></div>{% endfor %}{% endif %}
+{% if outgoing %}<h2>Your requests</h2>{% for q in outgoing %}<div class="card">Waiting for {{ q.target_student.public_name }} about {{ q.target_reservation.machine.name }}. <a class="btn small secondary" href="/requests/{{ q.id }}">View</a></div>{% endfor %}{% endif %}
+<h2>Contact settings</h2>
+<form method="post" action="/my/contact" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="mp">Phone number <span class="muted">(optional)</span></label>
+  <input id="mp" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="{{ student.phone|pretty_phone }}">
+  <div class="check"><input id="ms" type="checkbox" name="ack_phone" {% if student.phone_ack_at %}checked{% endif %}><label for="ms">{{ consent_text }}</label></div>
+  <div class="check"><input id="mr" type="checkbox" name="allow_requests" {% if student.allow_requests %}checked{% endif %}><label for="mr">Other students may send me a polite request to change a time slot (I can always say no).</label></div>
+  <button type="submit">Save</button>
+</form>
 <h2>Upcoming reservations</h2>
 {% for r in upcoming %}<div class="card"><strong>{{ r.machine.name }}</strong> · {{ r.start_at|local }} – {{ r.end_at|localtime }}<br>
 Ref <strong>{{ r.ref }}</strong> · {{ r.status|replace('_',' ') }} · <a href="/reservation/{{ r.ref }}">details / cancel</a></div>{% else %}<p class="muted">None. <a href="/reserve">Reserve a machine</a></p>{% endfor %}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Machine schedules</h1>
+<p class="muted">See who has each machine and when it is free. You can reach another student about swapping time.</p>
+{% for m, st in rows %}<a class="tile plain" href="/machine/{{ m.id }}">
+<strong>{{ m.name }}</strong> <span class="pill s-{{ st.status }}">{{ st.label }}</span>
+{% if st.current_user %}<br>{{ st.current_user }} is on it now{% endif %}
+{% if m.access_level == 'staff_only' %}<br><span class="muted">Run by shop staff</span>{% endif %}</a>{% endfor %}
+{% endblock %}

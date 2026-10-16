@@ -3,18 +3,20 @@
 {% block content %}
 <h1>Machines</h1>
 {% if msg %}<div class="notice" role="status">{{ msg }}</div>{% endif %}
-<div class="tablewrap"><table><tr><th>Machine</th><th>Group</th><th>Status now</th><th>Training</th><th>Supervisor</th><th>Active</th><th></th></tr>
-{% for m, st in board %}<tr><td><a href="/admin/machines/{{ m.id }}">{{ m.name }}</a></td><td>{{ m.group.name if m.group else '—' }}</td><td><span class="pill s-{{ st.status }}">{{ st.label }}</span></td><td>{{ 'required' if m.requires_certification else 'no' }}</td><td>{{ 'required' if m.requires_supervision else 'no' }}</td><td>{{ 'yes' if m.active else 'retired' }}</td>
+<div class="tablewrap"><table><tr><th>Machine</th><th>Group</th><th>Status now</th><th>Access</th><th>Training</th><th>Supervisor</th><th>Active</th><th></th></tr>
+{% for m, st in board %}<tr><td><a href="/admin/machines/{{ m.id }}">{{ m.name }}</a></td><td>{{ m.group.name if m.group else '—' }}</td><td><span class="pill s-{{ st.status }}">{{ st.label }}</span></td><td>{{ {'standard':'Approved list','advanced':'Super approved','staff_only':'Staff-run'}[m.access_level] }}</td><td>{{ 'required' if m.requires_certification else 'no' }}</td><td>{{ 'required' if m.requires_supervision else 'no' }}</td><td>{{ 'yes' if m.active else 'retired' }}</td>
 <td>{% if staff.role == 'admin' %}<details><summary>Edit</summary><form method="post" action="/admin/machines/save"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ m.id }}">
 <label>Name<input name="name" value="{{ m.name }}"></label><label>Group<select name="group_id"><option value="">None</option>{% for g in groups %}<option value="{{ g.id }}" {% if m.group_id == g.id %}selected{% endif %}>{{ g.name }}</option>{% endfor %}</select></label>
 <label>Description<input name="description" value="{{ m.description or '' }}"></label><label>Sort<input name="sort_order" type="number" value="{{ m.sort_order }}"></label>
+<label>Who can book it<select name="access_level"><option value="standard" {% if m.access_level=='standard' %}selected{% endif %}>Everyone on a list (approved + super approved)</option><option value="advanced" {% if m.access_level=='advanced' %}selected{% endif %}>Super approved only</option><option value="staff_only" {% if m.access_level=='staff_only' %}selected{% endif %}>Staff-run: students submit parts, cannot book</option></select></label>
 <div class="check"><label><input type="checkbox" name="requires_certification" {% if m.requires_certification %}checked{% endif %}><span>Requires training/certification</span></label></div>
 <div class="check"><label><input type="checkbox" name="requires_supervision" {% if m.requires_supervision %}checked{% endif %}><span>Requires supervisor on duty</span></label></div>
 <div class="check"><label><input type="checkbox" name="active" {% if m.active %}checked{% endif %}><span>Active (uncheck to retire)</span></label></div><button class="small">Save</button></form></details>{% endif %}</td></tr>{% endfor %}</table></div>
 {% if staff.role == 'admin' %}
 <div class="grid2"><form method="post" action="/admin/machines/save" class="card"><h2>Add machine</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label for="n">Name</label><input id="n" name="name" required><label for="g">Group</label><select id="g" name="group_id"><option value="">None</option>{% for g in groups %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}</select>
-<label for="d">Description</label><input id="d" name="description"><div class="check"><input id="rc" type="checkbox" name="requires_certification" checked><label for="rc">Requires training/certification</label></div>
+<label for="d">Description</label><input id="d" name="description"><label for="al">Who can book it</label><select id="al" name="access_level"><option value="standard">Everyone on a list</option><option value="advanced">Super approved only</option><option value="staff_only">Staff-run (students submit parts only)</option></select>
+<div class="check"><input id="rc" type="checkbox" name="requires_certification" checked><label for="rc">Requires training/certification</label></div>
 <div class="check"><input id="rs" type="checkbox" name="requires_supervision"><label for="rs">Requires supervisor on duty</label></div><button class="block">Add machine</button></form>
 <div class="card"><h2>Groups</h2><ul>{% for g in groups %}<li>{{ g.name }}</li>{% endfor %}</ul>
 <form method="post" action="/admin/groups/save"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label for="gn">New group</label><input id="gn" name="name" required><button class="block">Add group</button></form></div></div>{% endif %}

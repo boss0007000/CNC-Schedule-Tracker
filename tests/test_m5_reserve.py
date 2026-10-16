@@ -51,6 +51,7 @@ def test_successful_booking_issues_ref_and_email(db, world):
 def test_multi_slot_booking(db, world):
     r = try_book(db, world.alex, world.a_alex, MM1, at(1, 10), hours=3)
     assert r.hours == 3
+    shop_settings.set_value(db, "max_session_hours_advanced", 4)
     assert code_of(db, world.alex, world.a_alex, MM2, at(1, 14), hours=5).code == "too_long"
 
 
@@ -186,7 +187,7 @@ def test_new_waiver_version_forces_resigning(db, world):
 def test_outside_shop_hours(db, world):
     e = code_of(db, world.alex, world.a_alex, MM1, at(1, 7))
     assert e.code == "closed" and "hours" in e.message
-    assert code_of(db, world.alex, world.a_alex, MM1, at(1, 17), hours=2).code == "closed"  # runs past close
+    assert code_of(db, world.alex, world.a_alex, MM1, at(1, 21), hours=2).code == "closed"  # runs past 10 PM
 
 
 def test_closed_weekend_and_holiday(db, world):
@@ -256,6 +257,7 @@ def test_cancelled_slot_can_be_rebooked(db, world):
 # ------------------------------------------------------------- 6. fairness
 def test_weekly_reservation_count(db, world):
     shop_settings.set_value(db, "max_active_per_group", 9)
+    shop_settings.set_value(db, "max_reservations_per_week", 3)  # off by default: project approval gates use
     for h in (9, 11, 13):
         try_book(db, world.alex, world.a_alex, MM1, at(1, h))
     e = code_of(db, world.alex, world.a_alex, MM1, at(1, 15))
@@ -315,7 +317,7 @@ def test_slots_for_only_lists_genuinely_available(db, world):
     try_book(db, world.alex, world.a_alex, MM1, at(1, 10))
     res = rs.slots_for(db, world.alex, world.a_alex.number, machine(db, MM1).id, day)
     states = {clock.to_local(s["start"]).hour: s["state"] for s in res["slots"]}
-    assert states[10] == "taken" and states[9] == "open" and states[11] == "open" and len(res["slots"]) == 10
+    assert states[10] == "taken" and states[9] == "open" and states[11] == "open" and len(res["slots"]) == 14
 
 
 def test_slots_for_shows_reason_instead_of_slots_on_hard_block(db, world):
@@ -366,9 +368,9 @@ def test_extend_blocked_by_next_reservation(db, world):
 
 
 def test_extend_respects_hours_cap_and_closing_time(db, world):
-    r = try_book(db, world.alex, world.a_alex, MM1, at(1, 16), hours=2)
+    r = try_book(db, world.alex, world.a_alex, MM1, at(1, 20), hours=2)
     e = pytest.raises(UserError, rs.extend, db, r, world.alex).value
-    assert e.code == "closed"  # would run past 6pm
+    assert e.code == "closed"  # would run past 10 PM
 
 
 def test_cannot_extend_someone_elses_or_finished(db, world):

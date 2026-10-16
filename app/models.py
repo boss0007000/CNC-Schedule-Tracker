@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timezone
 
 from sqlalchemy import (
     JSON, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer,
-    LargeBinary, String, Text, Time, UniqueConstraint, event, text,
+    LargeBinary, String, Text, Time, UniqueConstraint, event, false, text, true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -62,7 +62,8 @@ MS_IN_USE = "in_use"
 MS_OVERDUE = "overdue"
 MS_MAINTENANCE = "under_maintenance"
 MS_INSPECTION = "awaiting_inspection"
-MACHINE_STATUSES = [MS_AVAILABLE, MS_RESERVED, MS_IN_USE, MS_OVERDUE, MS_MAINTENANCE, MS_INSPECTION]
+MS_HOLD = "on_hold"  # someone's setup / tools are in the machine: do not touch
+MACHINE_STATUSES = [MS_AVAILABLE, MS_RESERVED, MS_IN_USE, MS_OVERDUE, MS_MAINTENANCE, MS_INSPECTION, MS_HOLD]
 
 
 class Location(Base):
@@ -84,6 +85,9 @@ class Student(Base):
     created_at: Mapped[datetime] = mapped_column(default=_now)
     last_verified_at: Mapped[datetime | None]
     noshow_forgiven_at: Mapped[datetime | None]  # staff override: earlier no-shows no longer count
+    phone: Mapped[str | None] = mapped_column(String(20))  # +E.164-ish; required to reserve, shown on schedule + TV
+    phone_ack_at: Mapped[datetime | None]  # when they acknowledged their number is shown to other students/the TV
+    allow_requests: Mapped[bool] = mapped_column(default=True, server_default=true())  # time-change requests
     __table_args__ = (CheckConstraint("standing in ('freshman','sophomore','junior','senior','graduate')",
                                       name="ck_student_standing"),)
 
@@ -146,6 +150,9 @@ class Machine(Base):
     description: Mapped[str | None] = mapped_column(String(255))
     requires_certification: Mapped[bool] = mapped_column(default=True)
     requires_supervision: Mapped[bool] = mapped_column(default=False)
+    # standard = any listed student; advanced = students with extended access; staff_only = students may only
+    # submit parts for it (staff run it)
+    access_level: Mapped[str] = mapped_column(String(20), default="standard", server_default="standard")
     active: Mapped[bool] = mapped_column(default=True)  # inactive = hidden / retired
     # 'none' | 'awaiting_inspection' | 'under_maintenance'
     maintenance_state: Mapped[str] = mapped_column(String(30), default="none")
@@ -519,3 +526,64 @@ class EmailOutbox(Base):
     last_error: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(default=_now)
     sent_at: Mapped[datetime | None]
+
+
+# --- access lists and peer time-change requests ----------------------------------------
+ACCESS_APPROVED = "approved"
+ACCESS_SUPER = "super_approved"
+
+
+class AccessRoster(Base):
+    """Who may use the machines. Two lists, managed by staff; students never see which list anyone is on."""
+    __tablename__ = "access_roster"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)  # lower-cased
+    level: Mapped[str] = mapped_column(String(20))
+    added_by: Mapped[str] = mapped_column(String(60))
+    added_at: Mapped[datetime] = mapped_column(default=_now)
+    note: Mapped[str | None] = mapped_column(String(255))
+    __table_args__ = (CheckConstraint("level in ('approved','super_approved')", name="ck_roster_level"),)
+
+
+class TimeChangeRequest(Base):
+    """A polite, optional ask: 'could you move your slot to X so I can use the machine?' No priority, no
+    pressure: the other student can accept or decline in one tap, and a decline is never shown to anyone."""
+    __tablename__ = "time_change_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    requester_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    target_reservation_id: Mapped[int] = mapped_column(ForeignKey("reservations.id"), index=True)
+    target_student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    requester_approval_id: Mapped[int] = mapped_column(ForeignKey("approvals.id"))
+    proposed_start: Mapped[datetime]  # where the target's reservation would move to
+    proposed_end: Mapped[datetime]
+    note: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)  # pending|accepted|declined|expired|cancelled
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    expires_at: Mapped[datetime]
+    responded_at: Mapped[datetime | None]
+    requester: Mapped[Student] = relationship(foreign_keys=[requester_id])
+    target_student: Mapped[Student] = relationship(foreign_keys=[target_student_id])
+    target_reservation: Mapped[Reservation] = relationship(foreign_keys=[target_reservation_id])
+
+
+class MachineHold(Base):
+    """'My setup / my tools are in this machine: don't touch.' Capped in business days; one active hold per machine."""
+    __tablename__ = "machine_holds"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    machine_id: Mapped[int] = mapped_column(ForeignKey("machines.id"), index=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(10))  # setup | tools
+    started_at: Mapped[datetime] = mapped_column(default=_now)
+    expires_at: Mapped[datetime]
+    released_at: Mapped[datetime | None]
+    release_reason: Mapped[str | None] = mapped_column(String(20))  # owner | staff | expired
+    declared_via: Mapped[str] = mapped_column(String(20), default="checkout")
+    last_reminder_on: Mapped[date | None] = mapped_column(Date)  # local date of the last daily reminder
+    note: Mapped[str | None] = mapped_column(String(200))
+    machine: Mapped[Machine] = relationship()
+    student: Mapped[Student] = relationship()
+    __table_args__ = (
+        Index("uq_active_hold_machine", "machine_id", unique=True,
+              postgresql_where=text("released_at is null"), sqlite_where=text("released_at is null")),
+        CheckConstraint("kind in ('setup','tools')", name="ck_hold_kind"),
+    )

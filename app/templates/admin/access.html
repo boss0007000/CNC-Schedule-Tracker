@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<h1>Access lists</h1>
+{% if msg %}<div class="notice" role="status">{{ msg }}</div>{% endif %}
+<p>Students must be on one of these lists to book a machine. <strong>Approved</strong> students can book the machines marked "everyone on a list" (sessions up to the regular limit). <strong>Super approved</strong> students can book every student-bookable machine (longer sessions). Students never see which list anyone is on. Staff-run machines can't be booked by anyone here; students submit parts for them.</p>
+{% for level, title in [(S, 'Super approved'), (A, 'Approved')] %}
+<h2>{{ title }} ({{ roster[level]|length }})</h2>
+<div class="tablewrap"><table><tr><th>Email</th><th>Name (once they have signed in)</th><th>Added by</th><th>Note</th><th></th></tr>
+{% for r in roster[level] %}<tr><td>{{ r.email }}</td><td>{{ known.get(r.email, '—') }}</td><td>{{ r.added_by }}</td><td>{{ r.note or '' }}</td>
+<td>{% if staff.role != 'monitor' and (level == A or staff.role == 'admin') %}
+<form class="inline" method="post" action="/admin/access"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="remove"><input type="hidden" name="email" value="{{ r.email }}"><button class="small danger">Remove</button></form>
+<form class="inline" method="post" action="/admin/access"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="add"><input type="hidden" name="emails" value="{{ r.email }}"><input type="hidden" name="level" value="{{ A if level == S else S }}">
+{% if level == A and staff.role == 'admin' %}<button class="small secondary">Move to super approved</button>{% elif level == S %}<button class="small secondary">Move to approved</button>{% endif %}</form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="5">Nobody yet.</td></tr>{% endfor %}</table></div>
+{% endfor %}
+{% if staff.role != 'monitor' %}
+<form method="post" action="/admin/access" class="card"><h2>Add students</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="add">
+<label for="em">Campus emails (paste several: one per line or separated by commas)</label><textarea id="em" name="emails" required></textarea>
+<label for="lv">List</label><select id="lv" name="level"><option value="{{ A }}">Approved</option>{% if staff.role == 'admin' %}<option value="{{ S }}">Super approved</option>{% endif %}</select>
+{% if staff.role != 'admin' %}<p class="help">Only an admin can add to the super approved list.</p>{% endif %}
+<label for="nt">Note (optional)</label><input id="nt" name="note"><button class="block" type="submit">Add</button></form>{% endif %}
+{% endblock %}

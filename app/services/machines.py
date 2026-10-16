@@ -9,7 +9,8 @@ from app.errors import UserError
 from app.models import MACHINE_STATUSES, Machine, MachineGroup, MaintenanceRecord
 from app.services import audit
 
-FIELDS = ["name", "group_id", "description", "requires_certification", "requires_supervision", "active", "sort_order"]
+FIELDS = ["name", "group_id", "description", "requires_certification", "requires_supervision", "access_level", "active",
+          "sort_order"]
 
 
 def save_group(db: Session, actor: str, name: str, group: MachineGroup | None = None) -> MachineGroup:
@@ -44,7 +45,10 @@ def save_machine(db: Session, actor: str, machine: Machine | None, data: dict) -
         order = int(data.get("sort_order") or 0)
     except ValueError:
         raise UserError("Sort order must be a whole number.") from None
-    vals = {"name": name, "group_id": gid, "description": (data.get("description") or "").strip()[:255] or None,
+    level = data.get("access_level") or (machine.access_level if machine else "standard")
+    if level not in ("standard", "advanced", "staff_only"):
+        raise UserError("Unknown access level.")
+    vals = {"access_level": level, "name": name, "group_id": gid, "description": (data.get("description") or "").strip()[:255] or None,
             "requires_certification": bool(data.get("requires_certification")),
             "requires_supervision": bool(data.get("requires_supervision")),
             "active": bool(data.get("active", True)), "sort_order": order}

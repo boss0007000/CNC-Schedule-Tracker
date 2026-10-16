@@ -69,7 +69,7 @@ def test_full_check_out_with_photo_report(client, db, ctx):
     clock.freeze(at(0, 11, 40))
     page = client.get("/checkout")
     assert "Cleanup checklist" in page.text
-    base = {"csrf_token": ctx.tok, "form_token": security.new_form_token(), "shop_code": code(db),
+    base = {"csrf_token": ctx.tok, "form_token": security.new_form_token(), "shop_code": code(db), "leave_state": "clear",
             "report_kind": "damage", "report_text": "Chipped the end mill."}
     r = client.post("/checkout", data={**base, "machine_cleaned": "on"}, follow_redirects=False)
     assert r.status_code == 400 and "Tools returned" in r.text
@@ -87,7 +87,7 @@ def test_full_check_out_with_photo_report(client, db, ctx):
 def test_photo_must_be_an_image(client, db, ctx):
     client.post("/checkin", data={"csrf_token": ctx.tok, "form_token": security.new_form_token(), "ref": ctx.ref,
                                   "shop_code": code(db)})
-    full = {"csrf_token": ctx.tok, "form_token": security.new_form_token(), "shop_code": code(db),
+    full = {"csrf_token": ctx.tok, "form_token": security.new_form_token(), "shop_code": code(db), "leave_state": "clear",
             "report_kind": "damage", "report_text": "Chipped the end mill.", "machine_cleaned": "on",
             "tools_returned": "on", "workstation_clean": "on"}
     r = client.post("/checkout", data=full, files=[("photo", ("p.pdf", b"%PDF-1.4 x", "application/pdf"))])

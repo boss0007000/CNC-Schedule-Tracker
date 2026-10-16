@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shop Status</title>
-<link rel="stylesheet" href="/static/tv.css">
+<link rel="stylesheet" href="{{ asset('tv.css') }}">
 </head>
 <body>
 <div id="emergency" class="emergency" role="alert" hidden><div><div class="warn">&#9888;</div><h1>SHOP CLOSED &mdash; EMERGENCY</h1><p id="emergency-msg"></p></div></div>
@@ -22,11 +22,11 @@
   <section class="summary" id="summary" aria-label="Summary"></section>
   <main id="grid" class="grid" aria-live="off"></main>
   <div class="legend" aria-hidden="true">
-    <span><i class="lg inuse"></i>In use</span><span><i class="lg booked"></i>Booked</span><span><i class="lg done"></i>Used earlier</span>
-    <span><i class="lg overdue"></i>Overdue</span><span><i class="lg down"></i>Out of service</span><span><i class="lg free"></i>Free</span>
+    <span><i class="lg inuse"></i>In use</span><span><i class="lg booked"></i>Booked</span>
+    <span><i class="lg overdue"></i>Overdue</span><span><i class="lg hold"></i>Do not touch</span><span><i class="lg down"></i>Out of service</span>
   </div>
   <footer class="qrs" id="qrs"></footer>
 </div>
-<script src="/static/tv.js"></script>
+<script src="{{ asset('tv.js') }}"></script>
 </body>
 </html>

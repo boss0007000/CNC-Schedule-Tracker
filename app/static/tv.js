@@ -39,38 +39,57 @@
     r.appendChild(el('div', m.user ? 'avatar' : 'avatar empty', m.user ? initials(m.user) : (m.status === 'available' ? '\u2713' : '\u2014')));
     var mid = el('div', 'mid'), nm = el('div', 'name', m.name);
     mid.appendChild(nm);
-    var who = el('div', 'who');
-    if (m.user) {
-      who.appendChild(el('b', '', m.user));
-      var t = ' \u00b7 since ' + (m.since || '');
-      who.appendChild(el('i', '', t));
+    var who = el('div', 'who'), det = el('div', 'det');
+    function phone(txt) { if (txt) who.appendChild(el('span', 'ph', '\u260E ' + txt)); }
+    if (m.status === 'on_hold') {
+      who.appendChild(el('b', '', m.user)); phone(m.user_phone);
+      det.textContent = (m.hold_kind === 'setup' ? 'Setup' : 'Tools') + ' inside \u00b7 until ' + String(m.hold_until).replace(':00', '');
+    } else if (m.user) {
+      who.appendChild(el('b', '', m.user)); phone(m.user_phone);
+      det.textContent = 'Since ' + (m.since || '') + (m.open_ended ? ' \u00b7 nobody booked next' : '');
     } else if (m.status === 'available') {
-      who.appendChild(el('b', '', 'Open now')); who.appendChild(el('i', '', ' \u00b7 ' + (m.free_label || '')));
+      who.appendChild(el('b', '', 'Open now')); det.textContent = m.free_label || '';
     } else if (m.status === 'reserved') {
       who.appendChild(el('b', '', 'Held for a booking'));
-      who.appendChild(el('i', '', m.next_reservation ? ' \u00b7 starts ' + m.next_reservation : (m.available_at ? ' \u00b7 free ~' + m.available_at : '')));
+      det.textContent = m.next_reservation ? 'Starts ' + m.next_reservation : (m.available_at ? 'Free ~' + m.available_at : '');
     } else { who.appendChild(el('b', '', m.reason || 'Not available')); }
     mid.appendChild(who);
+    if (det.textContent) mid.appendChild(det);
+    if (m.next_user && m.status !== 'on_hold') {
+      var nx = el('div', 'nx'); nx.appendChild(document.createTextNode('Next ' + (m.next_reservation || '') + ': ')); nx.appendChild(el('b', '', m.next_user));
+      if (m.next_phone) nx.appendChild(document.createTextNode(' \u260E ' + m.next_phone));
+      mid.appendChild(nx);
+    }
     r.appendChild(mid);
-    if (m.user) {
+    var rt = el('div', 'rt');
+    rt.appendChild(el('div', 'badge', m.label));  // text label: colour is never the only signal
+    if (m.user && m.status !== 'on_hold') {
       var bn = el('div', 'big-num');
       if (m.status === 'overdue') { bn.textContent = '+' + m.overdue_minutes + ' min'; bn.appendChild(el('small', '', 'Overdue by')); }
+      else if (m.open_ended) { bn.textContent = fmtMin(m.remaining_minutes); bn.appendChild(el('small', '', 'Open-ended')); }
       else { bn.textContent = m.remaining_minutes + ' min'; bn.appendChild(el('small', '', 'Time left')); }
-      r.appendChild(bn);
+      rt.appendChild(bn);
     }
-    r.appendChild(el('div', 'badge', m.label));  // text label: colour is never the only signal
+    if (m.staff_run) r.appendChild(el('div', 'tag', 'Staff-run'));
+    else if (m.user || m.next_reservation || m.status === 'reserved' || m.status === 'on_hold') {  // scan: schedule + contact (sign-in required)
+      var q = el('div', 'mqr'), qi = el('img'); qi.src = m.qr; qi.alt = 'QR code: schedule and contact for ' + m.name; qi.title = 'Scan for schedule and contact';
+      q.appendChild(qi); r.appendChild(q);
+    }
+    r.appendChild(rt);
     b.appendChild(r);
     b.appendChild(timeline(m, w));
     c.appendChild(b);
     return c;
   }
 
+  function fmtMin(n) { return n >= 120 ? Math.floor(n / 60) + ' h ' + (n % 60 ? (n % 60) + ' min' : '') : n + ' min'; }
   function chip(cls, n, label) { var c = el('div', 'chip ' + cls); c.appendChild(el('b', '', String(n))); c.appendChild(el('span', '', label)); return c; }
 
   function render(d) {
     $('shop-name').textContent = d.shop_name;
     var o = $('open-state');
-    o.textContent = d.shop_open ? 'OPEN · ' + d.hours_label : (d.emergency.active ? 'CLOSED' : 'CLOSED · ' + d.hours_label);
+    var hrs = String(d.hours_label).replace(/:00/g, '').replace(' \u2013 ', '\u2013');
+    o.textContent = d.shop_open ? 'OPEN · ' + hrs : (d.emergency.active ? 'CLOSED' : 'CLOSED · ' + hrs);
     o.className = 'open ' + (d.shop_open ? 'yes' : 'no');
     $('supervisor').textContent = d.supervisor || 'none scheduled';
     $('code').textContent = d.code.value;

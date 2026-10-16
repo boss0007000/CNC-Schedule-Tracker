@@ -68,3 +68,5 @@ input.sm,select.sm{min-height:36px;padding:.2rem .5rem}.auto{width:auto!importan
 .prewrap{white-space:pre-wrap;font:inherit}.plain{text-decoration:none;color:inherit}
 meter{width:100%;height:1.1rem}.num{text-align:right;font-variant-numeric:tabular-nums}
 details summary{cursor:pointer;color:var(--brand);font-weight:600}
+.tile.plain{display:block;margin-bottom:.6rem}
+.s-on_hold{color:#6b2fa0}

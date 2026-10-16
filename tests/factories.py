@@ -65,7 +65,7 @@ def book(db, stu, a, machine_name, start, hours=1, **kw):
 
 
 def new_student(db, email, name="Test Student", standing="junior"):
-    s = Student(email=email, full_name=name, standing=standing)
+    s = Student(email=email, full_name=name, standing=standing, phone="+15305550199", phone_ack_at=clock.now())
     db.add(s)
     db.flush()
     return s

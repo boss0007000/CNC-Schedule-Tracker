@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app import clock
 from app.models import RES_CONFIRMED, RES_COMPLETED, RES_NO_SHOW, Reservation, ShopSession, Student
-from app.services import audit, notify, reservations
+from app.services import audit, holds, notify, reservations, status
 from app.services import settings as shop_settings
 
 _last_run: datetime | None = None
@@ -45,6 +45,8 @@ def mark_no_show(db: Session, r: Reservation, now: datetime) -> None:
     notify.no_show(db, r, suspended_until)
     if r.end_at > now:
         reservations.promote_waitlist(db, r.machine_id, max(r.start_at, now), r.end_at, now)
+    from app.services import sessions
+    sessions.notify_next_up(db, r.machine_id, now)
 
 
 def sweep(db: Session, now: datetime | None = None) -> dict:
@@ -60,19 +62,27 @@ def sweep(db: Session, now: datetime | None = None) -> dict:
             out["no_shows"] += 1
 
     for s in db.scalars(select(ShopSession).where(ShopSession.status == "active", ShopSession.expected_end_at < now)):
+        deadline = status.session_deadline(db, s, now)  # later than the booked end if nobody is waiting
+        if now <= deadline:
+            continue  # open-ended use: keep going, no warning, no auto-close
         if s.overdue_notified_at is None:
             s.overdue_notified_at = now
             notify.overdue_warning(db, s)
             audit.record(db, "system", "session.overdue", "session", s.id)
             out["overdue_warnings"] += 1
-        if now > s.expected_end_at + buffer:
+        if now > deadline + buffer:
             from app.services import sessions
             s.auto_closed, s.needs_review = True, True
-            sessions._close(db, s, now, status="auto_closed", end_time=s.expected_end_at)
+            sessions._close(db, s, now, status="auto_closed", end_time=deadline)
             notify.auto_closed(db, s)
             out["auto_closed"] += 1
 
     out["offers_expired"] = reservations.expire_offers(db, now)
+    out["holds_expired"] = holds.expire_due(db, now)
+    out["hold_reminders"] = holds.daily_reminders(db, now)
+    out["closing_prompts"] = holds.closing_prompts(db, now)
+    from app.services import changes
+    out["requests_expired"] = changes.expire_old(db, now)
     db.flush()
     return out
 

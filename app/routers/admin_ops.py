@@ -359,6 +359,7 @@ def machine_save(request: Request, form=Depends(get_form), user: StaffUser = Dep
             "name": form.get("name"), "group_id": form.get("group_id"), "description": form.get("description"),
             "requires_certification": form.get("requires_certification") == "on",
             "requires_supervision": form.get("requires_supervision") == "on",
+            "access_level": form.get("access_level"),
             "active": form.get("active", "on") == "on" if mid else True, "sort_order": form.get("sort_order")})
     except UserError as e:
         db.rollback()
@@ -389,7 +390,11 @@ def machine_detail(mid: int, request: Request, user: StaffUser = Depends(monitor
     recs = db.scalars(select(MaintenanceRecord).where(MaintenanceRecord.machine_id == mid)
                       .order_by(MaintenanceRecord.id.desc()).limit(100)).all()
     dmg = db.scalars(select(DamageReport).where(DamageReport.machine_id == mid).order_by(DamageReport.id.desc()).limit(50)).all()
+    from app.models import MachineHold
+    from app.services import holds as holds_svc
+    hold_hist = db.scalars(select(MachineHold).where(MachineHold.machine_id == mid).order_by(MachineHold.id.desc()).limit(20)).all()
     return render(request, "admin/machine.html", {"m": m, "state": status.machine_state(db, m), "records": recs,
+                                                  "hold": holds_svc.active_hold(db, mid), "hold_hist": hold_hist,
                                                   "damage": dmg, "statuses": MACHINE_STATUSES, "file_link": files.signed_link,
                                                   "msg": request.query_params.get("msg")})
 
@@ -563,3 +568,89 @@ def damage_status(did: int, form=Depends(get_form), user: StaffUser = Depends(su
         db.rollback()
         return RedirectResponse(f"/admin/incidents?msg={e.message}", status_code=303)
     return _done(db, "/admin/incidents")
+
+
+# ================================================================ access lists + change requests
+@router.get("/access")
+def access_page(request: Request, user: StaffUser = Depends(monitor), db: Session = Depends(get_db)):
+    from app.models import ACCESS_APPROVED, ACCESS_SUPER, Student
+    from app.services import access
+    r = access.roster(db)
+    known = {s.email: s.full_name for s in db.scalars(select(Student).where(Student.email.in_(
+        [x.email for lst in r.values() for x in lst] or [""])))}
+    return render(request, "admin/access.html", {"roster": r, "known": known, "A": ACCESS_APPROVED, "S": ACCESS_SUPER,
+                                                 "msg": request.query_params.get("msg")})
+
+
+@router.post("/access")
+def access_post(form=Depends(get_form), user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+    from app.models import ACCESS_SUPER
+    from app.services import access
+    action, level = form.get("action"), form.get("level", "")
+    try:
+        if level == ACCESS_SUPER and user.role != "admin":
+            raise UserError("Only an admin can add students to the super approved list.")
+        if action == "add":
+            res = access.set_levels(db, staff_actor(user), access.parse_emails(form.get("emails", "")), level,
+                                    form.get("note", ""))
+            msg = f"Added {res['added']}, moved {res['moved']}, already there {res['unchanged']}."
+        elif action == "remove":
+            existing = access.level_for(db, form.get("email", ""))
+            if existing == ACCESS_SUPER and user.role != "admin":
+                raise UserError("Only an admin can remove someone from the super approved list.")
+            access.remove(db, staff_actor(user), form.get("email", ""))
+            msg = "Removed."
+        else:
+            raise UserError("Unknown action.")
+    except UserError as e:
+        db.rollback()
+        return RedirectResponse(f"/admin/access?msg={e.message}", status_code=303)
+    return _done(db, f"/admin/access?msg={msg}")
+
+
+@router.get("/requests")
+def change_requests_page(request: Request, user: StaffUser = Depends(monitor), db: Session = Depends(get_db)):
+    from app.models import TimeChangeRequest
+    rows = db.scalars(select(TimeChangeRequest).order_by(TimeChangeRequest.id.desc()).limit(200)).all()
+    return render(request, "admin/change_requests.html", {"rows": rows})
+
+
+# ================================================================ holds (staff)
+@router.post("/holds/{hid}/{action}")
+def hold_action(hid: int, action: str, form=Depends(get_form), user: StaffUser = Depends(supervisor),
+                db: Session = Depends(get_db)):
+    from app.models import MachineHold
+    from app.services import holds
+    h = db.get(MachineHold, hid)
+    if h is None:
+        raise HTTPException(404, "Hold not found.")
+    try:
+        if action == "release":
+            holds.release(db, h, staff_actor(user), "staff")
+        elif action == "extend":
+            holds.extend(db, h, staff_actor(user), int(form.get("days") or 1))
+        else:
+            raise HTTPException(404, "Unknown action.")
+    except (UserError, ValueError) as e:
+        db.rollback()
+        msg = e.message if isinstance(e, UserError) else "Invalid number of days."
+        return RedirectResponse(f"/admin/machines/{h.machine_id}?msg={msg}", status_code=303)
+    return _done(db, f"/admin/machines/{h.machine_id}?msg=Done")
+
+
+@router.post("/hold-place/{mid}")
+def hold_place(mid: int, form=Depends(get_form), user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+    from app.models import Student
+    from app.services import holds
+    m = db.get(Machine, mid)
+    stu = db.scalar(select(Student).where(Student.email == (form.get("email") or "").strip().lower()))
+    try:
+        if m is None:
+            raise HTTPException(404, "Machine not found.")
+        if stu is None:
+            raise UserError("No student with that email has signed in yet.")
+        holds.declare(db, stu, m, form.get("kind", ""), via="staff", actor=staff_actor(user), note=form.get("note", ""))
+    except UserError as e:
+        db.rollback()
+        return RedirectResponse(f"/admin/machines/{mid}?msg={e.message}", status_code=303)
+    return _done(db, f"/admin/machines/{mid}?msg=Hold placed")

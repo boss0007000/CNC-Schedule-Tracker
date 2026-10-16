@@ -89,8 +89,8 @@ def busy(db, demo):
 # ============================================================ report numbers
 def test_utilization_and_downtime(db, busy):
     row = next(r for r in reports.utilization(db, TODAY, TODAY) if r["machine"] == MM1)
-    assert row["open_hours"] == 10.0 and row["used_hours"] == 0.8  # 45 min -> 0.75h rounds to 0.8
-    assert row["utilization_pct"] == 7.5 and row["downtime_hours"] == 3.0
+    assert row["open_hours"] == 14.0 and row["used_hours"] == 0.8  # 45 min -> 0.75h rounds to 0.8
+    assert row["utilization_pct"] == 5.4 and row["downtime_hours"] == 3.0
     other = next(r for r in reports.utilization(db, TODAY, TODAY) if r["machine"] == "Haas VF-3")
     assert other["used_hours"] == 0 and other["downtime_hours"] == 0
 
@@ -299,7 +299,7 @@ def test_settings_save_validates_and_audits(adm, db):
     cfg = shop_settings.load(db)
     assert cfg.max_reservations_per_week == 5 and cfg.email_domain == "school.edu" and cfg.collect_student_id is True
     row = db.scalar(select(AuditLog).where(AuditLog.action == "settings.update"))
-    assert row.after["max_reservations_per_week"] == 5 and row.before["max_reservations_per_week"] == 3
+    assert row.after["max_reservations_per_week"] == 5 and row.before["max_reservations_per_week"] == 0
     bad = post(adm, "/admin/settings", **{**data, "slot_minutes": "5"})
     assert bad.status_code == 400
     bad = post(adm, "/admin/settings", **{**data, "max_hours_per_week": "lots"})

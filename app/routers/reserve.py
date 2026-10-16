@@ -10,7 +10,7 @@ from app import clock, emailer, security
 from app.db import get_db
 from app.errors import UserError
 from app.models import Approval, Machine, Reservation, Student, WaitlistEntry
-from app.services import identity, projects, reservations
+from app.services import access, contact, identity, projects, reservations
 from app.services import settings as shop_settings
 from app.web import get_form, public_post_guard, render, student_required
 
@@ -32,7 +32,10 @@ def _page_ctx(db, student, approval, machine_id, day, nslots=1):
     my_approvals = db.scalars(select(Approval).where(Approval.student_id == student.id, Approval.status == "active")
                               .order_by(Approval.id.desc())).all()
     today = clock.to_local(clock.now()).date()
-    ctx = {"cfg": cfg, "approvals": my_approvals, "machines": projects.active_machines(db), "approval": approval or "",
+    lvl = access.effective_level(db, student)
+    max_slots = max(1, int(access.session_cap_hours(db, lvl) * 60 // cfg.slot_minutes))
+    ctx = {"cfg": cfg, "approvals": my_approvals, "max_slots": max_slots,
+           "machines": access.bookable_machines(db, student, projects.active_machines(db)), "approval": approval or "",
            "machine_id": machine_id, "day": day.isoformat() if day else "", "today": today.isoformat(),
            "last_day": (today + timedelta(days=cfg.max_advance_days)).isoformat(), "result": None,
            "nslots": nslots, "errs": [], "student": student}
@@ -68,10 +71,11 @@ def reserve_post(request: Request, bg: BackgroundTasks, form=Depends(get_form),
     try:
         machine_id = int(form.get("machine_id") or 0)
         start = _parse_dt(form.get("start", ""))
-        n = max(1, min(int(form.get("nslots") or 1), 12))
+        n = max(1, min(int(form.get("nslots") or 1), 48))
         slot = timedelta(minutes=shop_settings.load(db).slot_minutes)
         end = start + slot * n
         accepted = form.get("accept_waiver") == "on"
+        contact.apply_from_form(db, student, form)  # phone is required to reserve; saved with the booking
         if action == "waitlist":
             w = reservations.join_waitlist(db, student, approval_no, machine_id, start, end,
                                            waiver_accepted=accepted, ip=ip)
@@ -92,6 +96,10 @@ def reserve_post(request: Request, bg: BackgroundTasks, form=Depends(get_form),
         ctx["needs_waiver_prompt"] = e.code == "waiver_required"
         if e.code == "waiver_required" and ctx["result"]:
             ctx["result"]["needs_waiver"] = True
+        if e.code in ("phone_required",) or e.field in ("phone", "ack_phone"):
+            if ctx["result"]:
+                ctx["result"]["needs_contact"] = True
+            ctx["form_values"] = dict(form)
         return render(request, "reserve.html", ctx, status=400)
     bg.add_task(emailer.flush_in_new_session)
     return RedirectResponse(url, status_code=303)
@@ -162,19 +170,21 @@ def claim_page(token: str, request: Request, student: Student = Depends(student_
     if w is None or w.student_id != student.id:
         raise HTTPException(404, "That claim link isn't valid for your account.")
     ok = w.status == "offered" and w.claim_expires_at and w.claim_expires_at > clock.now()
-    return render(request, "claim.html", {"w": w, "ok": ok, "token": token})
+    return render(request, "claim.html", {"w": w, "ok": ok, "token": token, "student": student, "v": None})
 
 
 @router.post("/waitlist/claim/{token}")
-def claim_post(token: str, request: Request, bg: BackgroundTasks, student: Student = Depends(student_required),
-               db: Session = Depends(get_db)):
+def claim_post(token: str, request: Request, bg: BackgroundTasks, form=Depends(get_form),
+               student: Student = Depends(student_required), db: Session = Depends(get_db)):
     try:
+        contact.apply_from_form(db, student, form)
         r = reservations.claim(db, token, student, ip=security.client_ip(request))
         db.commit()
     except UserError as e:
         db.rollback()
         w = db.scalar(select(WaitlistEntry).where(WaitlistEntry.claim_token == token))
-        return render(request, "claim.html", {"w": w, "ok": False, "token": token, "errs": [e.message]}, status=400)
+        return render(request, "claim.html", {"w": w, "ok": True, "token": token, "errs": [e.message], "student": student,
+                                              "v": dict(form)}, status=400)
     bg.add_task(emailer.flush_in_new_session)
     return RedirectResponse(f"/reservation/{r.ref}?new=1", status_code=303)
 

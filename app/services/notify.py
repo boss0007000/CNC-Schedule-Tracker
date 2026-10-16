@@ -134,14 +134,94 @@ def overdue_warning(db: Session, s) -> None:
     emailer.queue(db, s.student.email, f"Your {s.machine.name} time is up",
                   f"Hi {s.student.first_name},\n\nYour reservation for {s.machine.name} ended at {_fmt(s.expected_end_at)}. "
                   f"Please wrap up and check out at {get_config().base_url}/checkout. Sessions that are not closed will be "
-                  f"closed automatically and flagged for staff.\n\n— {_shop(db)}")
+                  f"closed automatically and flagged for staff.\n\nComing back later? Tell everyone what's staying in the machine "
+                  f"(one tap): {session_link(s.id)}\n\n— {_shop(db)}")
 
 
 def auto_closed(db: Session, s) -> None:
     emailer.queue(db, s.student.email, f"Your {s.machine.name} session was auto-closed",
                   f"Hi {s.student.first_name},\n\nYou didn't check out of {s.machine.name}, so we closed the session "
-                  f"automatically and flagged it for staff review. Please remember to check out next time.\n\n— {_shop(db)}")
+                  f"automatically and flagged it for staff review. Please remember to check out next time.\n\nIf you left tools or a "
+                  f"setup in the machine, tell everyone (one tap): {session_link(s.id)}\n\n— {_shop(db)}")
 
 
 def emergency(db: Session, to: str, message: str) -> None:
     emailer.queue(db, to, "EMERGENCY: shop closed", f"{message}\n\nStop all machines and follow staff instructions.")
+
+
+# --- peer time-change requests ----------------------------------------------------------------
+def change_requested(db: Session, req) -> None:
+    r = req.target_reservation
+    note = f"\nTheir note: “{req.note}”\n" if req.note else ""
+    emailer.queue(db, req.target_student.email, f"{req.requester.public_name} asked about your {r.machine.name} time",
+                  f"Hi {req.target_student.first_name},\n\n{req.requester.public_name} would like to use the {r.machine.name} "
+                  f"during your booked time ({_fmt(r.start_at)} – {_fmt(r.end_at)}) and asked if you could move to "
+                  f"{_fmt(req.proposed_start)} – {_fmt(req.proposed_end)} instead.\n{note}\n"
+                  f"This is completely optional. Say yes or no with one tap — no reason needed, and a no is never shown to anyone:\n"
+                  f"{get_config().base_url}/requests/{req.id}\n\nIf you can't agree, a shop supervisor can help.\n\n— {_shop(db)}")
+
+
+def change_accepted(db: Session, req, token: str, claim_hours: float) -> None:
+    r = req.target_reservation
+    emailer.queue(db, req.requester.email, f"Good news: a {r.machine.name} time is yours to claim",
+                  f"Hi {req.requester.first_name},\n\nThey agreed to move, so the {r.machine.name} time you asked about is free for you. "
+                  f"Claim it here within {claim_hours:g} hours or it is released:\n"
+                  f"{get_config().base_url}/waitlist/claim/{token}\n\nThank them if you see them!\n\n— {_shop(db)}")
+    emailer.queue(db, req.target_student.email, f"Your {r.machine.name} time was moved",
+                  f"Hi {req.target_student.first_name},\n\nThanks for being flexible. Your reservation {r.ref} is now "
+                  f"{_fmt(r.start_at)} – {_fmt(r.end_at)} on the {r.machine.name}.\n\n— {_shop(db)}")
+
+
+def change_declined(db: Session, req) -> None:
+    emailer.queue(db, req.requester.email, "About your time-change request",
+                  f"Hi {req.requester.first_name},\n\nThey weren't able to change their time this time. No hard feelings: you can "
+                  f"join the waiting list for a slot, pick another time, or ask a shop supervisor for help.\n\n— {_shop(db)}")
+
+
+def machine_free_early(db: Session, r: Reservation) -> None:
+    emailer.queue(db, r.student.email, f"The {r.machine.name} is free right now",
+                  f"Hi {r.student.first_name},\n\nThe {r.machine.name} just became free and nobody is booked before you. Your time is "
+                  f"{_fmt(r.start_at)} – {_fmt(r.end_at)}, but you're welcome to start early if you're ready: check in at "
+                  f"{get_config().base_url}/checkin (your end time stays {_fmt(r.end_at)}). No obligation.\n\n— {_shop(db)}")
+
+
+# --- holds (setup / tools left in a machine) ---------------------------------------------------
+def session_link(sid: int) -> str:
+    return f"{get_config().base_url}/hold/session/{sid}?t=" + security.sign("hold-session", {"sid": sid})
+
+
+def hold_link(hid: int) -> str:
+    return f"{get_config().base_url}/hold/{hid}?t=" + security.sign("hold-manage", {"hid": hid})
+
+
+def hold_affects_booking(db: Session, h, r: Reservation) -> None:
+    emailer.queue(db, r.student.email, f"Heads up: someone's {'setup' if h.kind == 'setup' else 'tools'} are in the {r.machine.name}",
+                  f"Hi {r.student.first_name},\n\n{h.student.public_name} has left {'a setup' if h.kind == 'setup' else 'their tools'} in the "
+                  f"{r.machine.name} (please don't touch it). That may affect your booking {_fmt(r.start_at)} – {_fmt(r.end_at)}.\n"
+                  f"You can see their number on the schedule page and ask them to clear it: {get_config().base_url}/machine/{r.machine_id}\n"
+                  f"A shop supervisor can also help.\n\n— {_shop(db)}")
+
+
+def hold_reminder(db: Session, h, day: int, total: int, final: bool) -> None:
+    what = "setup" if h.kind == "setup" else "tools"
+    emailer.queue(db, h.student.email, f"Your {what} is still in the {h.machine.name}" + (" (last day)" if final else ""),
+                  f"Hi {h.student.first_name},\n\nYour {what} {'is' if what == 'setup' else 'are'} still in the {h.machine.name} "
+                  f"(day {day} of {total}, held until {_fmt(h.expires_at)}). "
+                  f"{'Today is the last day: please come back and clear it, or it will be released and staff will clear it.' if final else 'Coming back to work on it? Great. If you are finished, please clear it so others can use the machine.'}\n\n"
+                  f"One tap to say it's cleared: {hold_link(h.id)}\n\n— {_shop(db)}")
+
+
+def hold_expired(db: Session, h) -> None:
+    emailer.queue(db, h.student.email, f"Your hold on the {h.machine.name} has ended",
+                  f"Hi {h.student.first_name},\n\nThe time limit for keeping your {'setup' if h.kind == 'setup' else 'tools'} in the "
+                  f"{h.machine.name} has passed, so it is open to others again. If anything of yours is still in the machine, "
+                  f"please collect it soon; staff have been told and will put it aside.\n\n— {_shop(db)}")
+    to_staff(db, f"Hold expired: {h.machine.name}", f"{h.student.full_name}'s {h.kind} hold on {h.machine.name} expired. "
+                                                       f"Check whether tools or a setup still need clearing.")
+
+
+def closing_prompt(db: Session, s) -> None:
+    emailer.queue(db, s.student.email, f"Closing soon: anything staying in the {s.machine.name}?",
+                  f"Hi {s.student.first_name},\n\nThe shop is closing soon. One tap to tell everyone what you're leaving in the "
+                  f"{s.machine.name}:\n  • Cleared out (nothing staying)\n  • Only my tools are in it: do not touch\n  • A setup is in it: do not touch\n\n"
+                  f"{session_link(s.id)}\n\nThis lets others know not to disturb your work. Holds last a limited number of open days.\n\n— {_shop(db)}")

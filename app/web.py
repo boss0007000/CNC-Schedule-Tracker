@@ -43,7 +43,20 @@ def _hours(h: float | None) -> str:
     return "—" if h is None else f"{h:g}"
 
 
-templates.env.filters.update(local=_local, localtime=_localtime, localdate=_localdate,
+from app.services import contact as _contact  # noqa: E402
+
+def _asset(name: str) -> str:
+    """Static URL with a version stamp so browsers (and the TV!) pick up updates immediately after a deploy."""
+    try:
+        v = int((BASE / "static" / name).stat().st_mtime)
+    except OSError:
+        v = 0
+    return f"/static/{name}?v={v}"
+
+
+templates.env.globals["asset"] = _asset
+templates.env.globals["consent_text"] = _contact.ACK
+templates.env.filters.update(pretty_phone=_contact.pretty, local=_local, localtime=_localtime, localdate=_localdate,
                              localinput=_localinput, hours=_hours)
 
 

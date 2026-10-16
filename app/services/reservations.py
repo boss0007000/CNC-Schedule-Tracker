@@ -16,7 +16,7 @@ from app.models import (
     RES_ACTIVE, RES_CANCELLED, RES_CHECKED_IN, RES_CONFIRMED, RES_COUNTED, Approval, Certification, Machine,
     MaintenanceRecord, Reservation, SafetyWaiver, ShopSession, Student, WaitlistEntry,
 )
-from app.services import audit, notify, numbers, shop
+from app.services import access, audit, holds, notify, numbers, shop
 from app.services import settings as shop_settings
 
 
@@ -111,7 +111,7 @@ class Ctx:
 def validate(db: Session, student: Student, approval_number: str | None, machine_id: int, start: datetime,
              end: datetime, *, now: datetime | None = None, waiver_accepted: bool = False,
              ignore_overlap: bool = False, exclude_id: int | None = None, allow_started: bool = False,
-             override: bool = False) -> Ctx:
+             override: bool = False, contact_accepted: bool = False) -> Ctx:
     now = now or clock.now()
     cfg = shop_settings.load(db)
     machine = db.get(Machine, machine_id)
@@ -123,15 +123,16 @@ def validate(db: Session, student: Student, approval_number: str | None, machine
     n = (end - start) / slot
     if n != int(n) or int(n) < 1:
         raise UserError("Reservations are booked in whole time slots.", code="bad_window")
-    if int(n) > cfg.max_reservation_slots:
-        raise UserError(f"A single reservation can be at most {cfg.max_reservation_slots} slots "
-                        f"of {cfg.slot_minutes} minutes.", code="too_long")
     grid = {s for s, _ in shop.slot_grid(db, clock.to_local(start).date(), cfg.slot_minutes, machine.location_id)}
     cur, aligned = start, True
     while cur < end:
         aligned &= cur in grid
         cur += slot
     approval = None
+    if override:  # staff bookings still can't exceed the longest session anyone is allowed
+        cap_h = access.session_cap_hours(db, "super_approved")
+        if (end - start).total_seconds() / 3600 > cap_h + 1e-9:
+            raise UserError(f"A single session can be at most {cap_h:g} hours.", code="too_long")
 
     if not override:
         # 1. approval
@@ -153,6 +154,12 @@ def validate(db: Session, student: Student, approval_number: str | None, machine
         if machine.id not in approval.machine_ids:
             raise UserError(f"Your approval doesn't cover the {machine.name}. Covered machines: "
                             f"{machine_names(db, approval.machine_ids)}.", code="not_covered", field="machine")
+        # 2b. access: on a list, and the list the machine needs (staff-only machines can't be booked)
+        level = access.check_access(db, student, machine)
+        cap_h = access.session_cap_hours(db, level)
+        if (end - start).total_seconds() / 3600 > cap_h + 1e-9:
+            raise UserError(f"A single session can be at most {cap_h:g} hours. Book a second session after it if you "
+                            f"need more.", code="too_long")
         # 3. certification (hard block)
         if machine.requires_certification:
             valid, expired = find_certification(db, student.id, machine, end)
@@ -167,6 +174,12 @@ def validate(db: Session, student: Student, approval_number: str | None, machine
         # 4. safety waiver
         if not has_waiver(db, student.id, cfg.waiver_version) and not waiver_accepted:
             raise UserError("Please read and accept the safety waiver to continue.", code="waiver_required")
+
+    # 4b. a phone number is required to reserve: other students can call about the machine
+    if not override and not contact_accepted and not (student.phone and student.phone_ack_at):
+        raise UserError("Please add your phone number. It is shown to other students on the schedule page and the shop TV "
+                        "while you have a booking, so they can reach you about the machine.", code="phone_required",
+                        field="phone")
 
     # 5. slot rules
     if (not allow_started and not override and start <= now) or end <= now:
@@ -188,6 +201,12 @@ def validate(db: Session, student: Student, approval_number: str | None, machine
         MaintenanceRecord.window_end > start).limit(1))
     if blocked:
         raise UserError(f"The {machine.name} has scheduled maintenance during that time.", code="maintenance")
+    hold = holds.active_hold(db, machine.id, now)
+    if hold and not override and hold.student_id != student.id and start < hold.expires_at:
+        raise UserError(f"The {machine.name} has {hold.student.public_name}'s "
+                        f"{'setup' if hold.kind == 'setup' else 'tools'} in it (please don't touch it) until {fmt(hold.expires_at)}. "
+                        f"Pick another machine or a time after that, or call them from the schedule page to ask.",
+                        code="machine_on_hold")
     if not ignore_overlap and (overlapping(db, machine.id, start, end, exclude_id)
                                or _holds_blocking(db, machine.id, start, end, now, student.id)):
         raise UserError("That time slot is already taken.", code="overlap", field="start")
@@ -208,11 +227,11 @@ def validate(db: Session, student: Student, approval_number: str | None, machine
             Reservation.student_id == student.id, Reservation.status.in_(RES_COUNTED),
             Reservation.start_at >= wk_s, Reservation.start_at < wk_e,
             *([Reservation.id != exclude_id] if exclude_id else []))).all()
-        if len(week) + (0 if exclude_id else 1) > cfg.max_reservations_per_week:
+        if cfg.max_reservations_per_week and len(week) + (0 if exclude_id else 1) > cfg.max_reservations_per_week:
             raise UserError(f"You can have at most {cfg.max_reservations_per_week} reservations per week, and you "
                             f"already have {len(week)} that week.", code="weekly_count")
         req_h = (end - start).total_seconds() / 3600
-        if sum(r.hours for r in week) + req_h > cfg.max_hours_per_week + 1e-9:
+        if cfg.max_hours_per_week and sum(r.hours for r in week) + req_h > cfg.max_hours_per_week + 1e-9:
             raise UserError(f"This would put you over the weekly limit of {cfg.max_hours_per_week:g} hours "
                             f"({sum(r.hours for r in week):g} already booked that week).", code="weekly_hours")
         grp_cond = (Machine.group_id == machine.group_id) if machine.group_id else (Machine.id == machine.id)
@@ -246,23 +265,25 @@ def slots_for(db: Session, student: Student, approval_number: str, machine_id: i
     first_error = None
     for s, e in grid:
         try:
-            ctx = validate(db, student, approval_number, machine_id, s, e, now=now, waiver_accepted=True)
+            ctx = validate(db, student, approval_number, machine_id, s, e, now=now, waiver_accepted=True,
+                           contact_accepted=True)
             out["slots"].append({"start": s, "end": e, "state": "open"})
             out["needs_waiver"] = ctx.needs_waiver
         except UserError as ex:
             if ex.code == "overlap":
                 try:
                     validate(db, student, approval_number, machine_id, s, e, now=now, waiver_accepted=True,
-                             ignore_overlap=True)
+                             ignore_overlap=True, contact_accepted=True)
                     out["slots"].append({"start": s, "end": e, "state": "taken"})
                 except UserError:
                     pass
             elif ex.code in ("approval_not_found", "approval_revoked", "approval_expired", "approval_exhausted",
-                             "not_covered", "cert_missing", "cert_expired", "suspended", "too_far", "weekly_count",
+                             "not_covered", "machine_on_hold", "not_listed", "needs_more_access", "staff_only", "too_long", "cert_missing", "cert_expired", "suspended", "too_far", "weekly_count",
                              "weekly_hours", "group_limit", "machine_unavailable", "maintenance", "emergency"):
                 first_error = first_error or ex
     if not any(s["state"] == "open" for s in out["slots"]) and first_error:
         out["error"], out["code"] = first_error.message, first_error.code
+    out["needs_contact"] = bool(out["slots"]) and not (student.phone and student.phone_ack_at)
     if out["slots"] and not out["needs_waiver"]:
         out["needs_waiver"] = not has_waiver(db, student.id, cfg.waiver_version)
     return out
@@ -309,6 +330,8 @@ def cancel(db: Session, r: Reservation, *, actor: str, by_staff: bool = False, r
     if not quiet:
         notify.reservation_cancelled(db, r, by_staff, reason)
     promote_waitlist(db, r.machine_id, r.start_at, r.end_at, now)
+    from app.services import sessions
+    sessions.notify_next_up(db, r.machine_id, now)
 
 
 def extend(db: Session, r: Reservation, student: Student, slots: int = 1, *, now: datetime | None = None,
@@ -323,7 +346,8 @@ def extend(db: Session, r: Reservation, student: Student, slots: int = 1, *, now
     db.execute(select(Machine.id).where(Machine.id == r.machine_id).with_for_update())
     try:
         validate(db, student, r.approval.number if r.approval else None, r.machine_id, r.start_at, new_end, now=now,
-                 exclude_id=r.id, allow_started=True, waiver_accepted=True, override=r.approval_id is None)
+                 exclude_id=r.id, allow_started=True, waiver_accepted=True, override=r.approval_id is None,
+                 contact_accepted=True)
     except UserError as e:
         if e.code == "overlap":
             raise UserError("The next time slot is already booked, so this reservation can't be extended.",
@@ -383,7 +407,7 @@ def promote_waitlist(db: Session, machine_id: int, start: datetime, end: datetim
         approval = db.get(Approval, w.approval_id)
         try:
             validate(db, w.student, approval.number, machine_id, w.start_at, w.end_at, now=now, waiver_accepted=True,
-                     allow_started=w.start_at <= now)
+                     allow_started=w.start_at <= now, contact_accepted=True)
         except UserError:
             continue  # no longer eligible or still blocked: try the next student
         w.status, w.offered_at = "offered", now

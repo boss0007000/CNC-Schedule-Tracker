@@ -23,6 +23,19 @@ def flow(name: str):
     return next((f for f in FLOWS if f[0] == name), None)
 
 
+def png_for_path(path: str, box_size: int = 8) -> bytes:
+    """QR for any same-site path (used for the per-machine schedule/contact codes on the TV)."""
+    key = (url_for(path), box_size)
+    if key not in _cache:
+        q = qrcode.QRCode(error_correction=ERROR_CORRECT_M, box_size=box_size, border=2)
+        q.add_data(key[0])
+        q.make(fit=True)
+        buf = io.BytesIO()
+        q.make_image(fill_color="black", back_color="white").save(buf, format="PNG")
+        _cache[key] = buf.getvalue()
+    return _cache[key]
+
+
 def png(name: str, box_size: int = 10) -> bytes:
     f = flow(name)
     if f is None:

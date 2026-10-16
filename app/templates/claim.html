@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% from "_macros.html" import errors %}
+{% from "_contact.html" import contact_fields %}
 {% block content %}
 <h1>Claim your slot</h1>
 {{ errors(errs) }}
 <div class="card"><p><strong>{{ w.machine.name }}</strong><br>{{ w.start_at|local }} – {{ w.end_at|localtime }}</p>
 {% if ok %}<p>This slot is held for you until <strong>{{ w.claim_expires_at|localtime }}</strong>.</p>
-<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="block" type="submit">Claim this slot</button></form>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% if not student.phone_ack_at or v %}{{ contact_fields(student, v, required=True) }}{% endif %}<button class="block" type="submit">Claim this slot</button></form>
 {% elif w.status == 'claimed' %}<p>You already claimed this slot. See <a href="/my">My shop</a>.</p>
 {% else %}<p>Sorry, the claim window has closed.</p>{% endif %}</div>
 {% endblock %}

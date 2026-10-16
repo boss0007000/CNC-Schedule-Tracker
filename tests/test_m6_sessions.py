@@ -36,7 +36,8 @@ def booked(db, w, hour=11, hours=1, who=None, name=MM1, approval=None):
 
 
 def go(minutes_after_t0):
-    clock.freeze(clock.now().replace(hour=18, minute=0) + timedelta(minutes=minutes_after_t0))
+    from tests.conftest import T0
+    clock.freeze(T0 + timedelta(minutes=minutes_after_t0))
 
 
 def checkin(db, w, r, when=None, shop_code=None, stu=None):
@@ -57,6 +58,7 @@ def test_check_in_success(db, w):
 
 
 def test_too_early(db, w):
+    shop_settings.set_value(db, "early_checkin_max_minutes", 0)  # early-start rule tested separately
     r = booked(db, w)
     go(44)
     with pytest.raises(UserError) as e:
@@ -388,20 +390,22 @@ def test_old_no_shows_age_out(db, w):
     assert w.alex.suspended_until is None  # earlier two fell outside the 30-day window
 
 
-def test_overdue_warning_then_auto_close(db, w):
-    r = booked(db, w, 11, 1)
-    s = checkin(db, w, r, when=60)
-    go(121)  # 12:01 -> overdue
+def test_overdue_at_closing_time_then_auto_close(db, w):
+    """Nobody is waiting, so a student may keep going past the booked end; the shop closing (10 PM) is the limit."""
+    r = booked(db, w, 21, 1)
+    s = checkin(db, w, r, when=655)  # 8:55 PM
+    go(721)  # 10:01 PM: the shop has closed -> overdue
     emailer.SENT.clear()
     out = lifecycle.sweep(db)
     assert out["overdue_warnings"] == 1 and out["auto_closed"] == 0
     assert status.machine_state(db, machine(db, MM1)).status == "overdue"
     emailer.flush_outbox(db)
-    assert any("time is up" in m["subject"] for m in emailer.SENT)
+    warn = next(m for m in emailer.SENT if "time is up" in m["subject"])
+    assert "/hold/session/" in warn["text"]  # one tap to say what is staying in the machine
     assert lifecycle.sweep(db)["overdue_warnings"] == 0  # warned once
-    go(149)  # 12:29 -> 29 min past end, buffer is 30
+    go(749)  # 29 min after close; buffer is 30
     assert lifecycle.sweep(db)["auto_closed"] == 0
-    go(151)
+    go(751)
     emailer.SENT.clear()
     out = lifecycle.sweep(db)
     assert out["auto_closed"] == 1
@@ -415,21 +419,45 @@ def test_overdue_warning_then_auto_close(db, w):
 
 def test_auto_close_buffer_is_configurable(db, w):
     shop_settings.set_value(db, "autoclose_buffer_minutes", 5)
-    r = booked(db, w, 11, 1)
-    checkin(db, w, r, when=60)
-    go(127)
+    r = booked(db, w, 21, 1)
+    checkin(db, w, r, when=655)
+    go(727)
     assert lifecycle.sweep(db)["auto_closed"] == 1
 
 
-def test_extension_moves_session_end_and_rearms_overdue_warning(db, w):
+def test_keep_working_after_your_slot_when_nobody_is_next(db, w):
     r = booked(db, w, 11, 1)
     s = checkin(db, w, r, when=60)
-    go(121)
+    for minute in (125, 180, 300):  # 12:05, 1:00 PM, 3:00 PM: nobody booked, shop open
+        go(minute)
+        out = lifecycle.sweep(db)
+        assert out["overdue_warnings"] == 0 and out["auto_closed"] == 0 and s.status == "active"
+        st = status.machine_state(db, machine(db, MM1))
+        assert st.status == "in_use" and st.open_ended
+    # the extra time never counts against the approval or any cap
+    used_hours, used_n = rs.approval_usage(db, w.a)
+    assert used_hours == 1 and used_n == 1
+
+
+def test_open_ended_use_ends_when_the_next_booking_starts(db, w):
+    ja = make_approval(db, w.jordan, [MM1])
+    r = booked(db, w, 11, 1)
+    book(db, w.jordan, ja, MM1, at(0, 14))
+    s = checkin(db, w, r, when=60)
+    go(250)  # 2:10 PM: Jordan's slot began 10 minutes ago and Alex is still on it
+    out = lifecycle.sweep(db)
+    assert out["overdue_warnings"] == 1 and status.machine_state(db, machine(db, MM1)).status == "overdue"
+    go(190)
+
+
+def test_extension_after_booked_end_is_not_possible_but_open_ended_needs_none(db, w):
+    r = booked(db, w, 21, 1)
+    s = checkin(db, w, r, when=655)
+    go(721)
     lifecycle.sweep(db)
     assert s.overdue_notified_at is not None
-    go(122)
-    # session is overdue but still active: extension window has passed (reservation ended)
-    with pytest.raises(UserError):
+    go(722)
+    with pytest.raises(UserError):  # the reservation ended; extend only works while it is current
         rs.extend(db, r, w.alex)
 
 

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<h1>Time-change requests</h1>
+<p>Students can politely ask each other to change slots; the other student can always say no. If two students can't agree, you decide: use Reservations to edit or cancel. Declines are only shown here.</p>
+<div class="tablewrap"><table><tr><th>When asked</th><th>Machine</th><th>From</th><th>To (asked of)</th><th>Their slot</th><th>Moves to</th><th>Status</th></tr>
+{% for q in rows %}<tr><td>{{ q.created_at|local }}</td><td>{{ q.target_reservation.machine.name }}</td><td>{{ q.requester.full_name }}</td><td>{{ q.target_student.full_name }}</td>
+<td>{{ q.target_reservation.start_at|local }}</td><td>{{ q.proposed_start|local }}</td><td>{{ q.status }}</td></tr>{% else %}<tr><td colspan="7">None yet.</td></tr>{% endfor %}</table></div>
+{% endblock %}

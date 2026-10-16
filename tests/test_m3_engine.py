@@ -16,6 +16,11 @@ NOW = datetime(2026, 3, 4, 18, 0, tzinfo=timezone.utc)  # Wed 10:00 PST
 M = timedelta(minutes=1)
 
 
+def at_local(h, m=0):
+    from app import clock as _c
+    return _c.local_dt(date(2026, 3, 4), time(h, m))
+
+
 def res(start_off, end_off, name="Sam P.", anchor_off=None):
     s, e = NOW + start_off * M, NOW + end_off * M
     return ResInfo(s, e, NOW + (anchor_off if anchor_off is not None else start_off) * M, name)
@@ -59,6 +64,36 @@ def test_in_use_to_overdue_after_expected_end():
     sess = SessionInfo("Alex R.", NOW - 70 * M, NOW - 10 * M)
     s = derive(StatusInputs(session=sess), NOW)
     assert s.status == MS_OVERDUE and s.overdue_minutes == 10 and s.current_user == "Alex R."
+
+
+def test_open_ended_when_nobody_is_booked_next_and_shop_open():
+    sess = SessionInfo("Alex R.", NOW - 70 * M, NOW - 10 * M)
+    s = derive(StatusInputs(session=sess, close_at=NOW + 240 * M), NOW)
+    assert s.status == MS_IN_USE and s.open_ended and s.estimated_available_at == NOW + 240 * M
+    assert s.remaining_minutes == 240
+
+
+def test_open_ended_stops_when_next_booking_starts():
+    sess = SessionInfo("Alex R.", NOW - 70 * M, NOW - 10 * M)
+    s = derive(StatusInputs(session=sess, close_at=NOW + 240 * M, reservations=[res(30, 90, "Sam P.")]), NOW)
+    assert s.status == MS_IN_USE and s.open_ended and s.estimated_available_at == NOW + 30 * M  # until Sam's slot
+    s2 = derive(StatusInputs(session=sess, close_at=NOW + 240 * M, reservations=[res(-5, 55, "Sam P.")]), NOW)
+    assert s2.status == MS_OVERDUE  # Sam is waiting now
+
+
+def test_overdue_after_closing_time_even_if_nobody_waits():
+    sess = SessionInfo("Alex R.", NOW - 70 * M, NOW - 10 * M)
+    assert derive(StatusInputs(session=sess, close_at=NOW - 1 * M), NOW).status == MS_OVERDUE
+
+
+def test_hold_shows_do_not_touch_when_nobody_is_on_the_machine():
+    from app.services.status import HoldInfo
+    h = HoldInfo("Alex R.", "setup", NOW + 2000 * M, "+15305550101")
+    s = derive(StatusInputs(hold=h), NOW)
+    assert s.status == "on_hold" and s.label == "Do Not Touch" and s.hold_kind == "setup" and s.current_phone == "+15305550101"
+    in_use = derive(StatusInputs(hold=h, session=SessionInfo("Alex R.", NOW - 5 * M, NOW + 55 * M)), NOW)
+    assert in_use.status == MS_IN_USE  # while someone is on it, that wins
+    assert derive(StatusInputs(hold=h, maintenance_state="under_maintenance"), NOW).status == MS_MAINTENANCE
 
 
 def test_in_use_not_overdue_at_exact_end():
@@ -123,7 +158,10 @@ def test_db_backed_status_matches_pure_function(db, demo):
     db.flush()
     state = st.machine_state(db, m)
     assert state.status == MS_IN_USE and state.current_user == stu.public_name
-    clock.advance(minutes=61)
+    clock.advance(minutes=61)  # past the booked end, nobody waiting, shop still open: keep going
+    keep = st.machine_state(db, m)
+    assert keep.status == MS_IN_USE and keep.open_ended
+    clock.freeze(at_local(22, 1))  # shop has closed: now it is overdue
     assert st.machine_state(db, m).status == MS_OVERDUE
 
 
@@ -137,7 +175,7 @@ def test_hours_weekday_vs_weekend(db, demo):
     assert shop.hours_for_date(db, date(2026, 3, 4)) is not None  # Wed
     assert shop.hours_for_date(db, date(2026, 3, 7)) is None  # Sat closed
     o, c = shop.hours_for_date(db, date(2026, 3, 4))
-    assert o == datetime(2026, 3, 4, 16, 0, tzinfo=timezone.utc) and c == datetime(2026, 3, 5, 2, 0, tzinfo=timezone.utc)
+    assert o == datetime(2026, 3, 4, 16, 0, tzinfo=timezone.utc) and c == datetime(2026, 3, 5, 6, 0, tzinfo=timezone.utc)
 
 
 def test_holiday_exception_closes_shop(db, demo):
@@ -157,13 +195,13 @@ def test_special_hours_exception(db, demo):
 def test_is_open_boundaries(db, demo):
     open_ = datetime(2026, 3, 4, 16, 0, tzinfo=timezone.utc)
     assert shop.is_open(db, open_) and not shop.is_open(db, open_ - M)
-    close = datetime(2026, 3, 5, 2, 0, tzinfo=timezone.utc)
+    close = datetime(2026, 3, 5, 6, 0, tzinfo=timezone.utc)  # 10 PM Pacific
     assert not shop.is_open(db, close) and shop.is_open(db, close - M)
 
 
 def test_slot_grid_normal_day(db, demo):
     slots = shop.slot_grid(db, date(2026, 3, 4), 60)
-    assert len(slots) == 10 and slots[0][0].hour == 16 and slots[-1][1].hour == 2
+    assert len(slots) == 14 and slots[0][0].hour == 16 and slots[-1][1].hour == 6
 
 
 def test_slot_grid_dst_spring_forward_has_one_less_hour(db, demo):
@@ -183,7 +221,7 @@ def test_slot_grid_dst_fall_back_has_one_extra_hour(db, demo):
 
 
 def test_slot_grid_partial_final_slot_dropped(db, demo):
-    assert len(shop.slot_grid(db, date(2026, 3, 4), 90)) == 6  # 10h / 1.5h = 6.67 -> 6
+    assert len(shop.slot_grid(db, date(2026, 3, 4), 90)) == 9  # 14h / 1.5h = 9.33 -> 9
 
 
 def test_supervisor_on_duty_and_coverage(db, demo):

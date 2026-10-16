@@ -160,3 +160,42 @@ def test_fresh_database_gets_location_and_hours_on_boot(db):
     m = ms.save_machine(db, "staff:admin", None, {"name": "Brand New Lathe", "requires_certification": True})
     db.commit()
     assert m.id and m.location_id == 1
+
+
+def _boot(monkeypatch, db, user="admin", pw="a-long-password-1", reset=False):
+    from app.config import get_config
+    from app.main import bootstrap
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_USERNAME", user)
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_PASSWORD", pw)
+    monkeypatch.setenv("BOOTSTRAP_RESET", "true" if reset else "false")
+    get_config.cache_clear()
+    try:
+        bootstrap(db)
+        db.commit()
+    finally:
+        get_config.cache_clear()
+
+
+def test_bootstrap_creates_first_admin_and_it_can_log_in(monkeypatch, db):
+    _boot(monkeypatch, db)
+    assert staffauth.authenticate(db, "admin", "a-long-password-1").role == "admin"
+
+
+def test_bootstrap_with_short_password_raises_a_clear_error(monkeypatch, db):
+    with pytest.raises(UserError) as e:
+        _boot(monkeypatch, db, pw="admin")
+    assert "at least 10 characters" in e.value.message
+    assert db.scalar(select(StaffUser)) is None
+
+
+def test_bootstrap_reset_recovers_locked_or_forgotten_admin(monkeypatch, db):
+    _boot(monkeypatch, db)
+    u = db.scalar(select(StaffUser).where(StaffUser.username == "admin"))
+    u.locked_until, u.active = clock.now() + timedelta(hours=1), False
+    db.commit()
+    _boot(monkeypatch, db, pw="a-brand-new-password-2")  # without RESET nothing changes
+    with pytest.raises(UserError):
+        staffauth.authenticate(db, "admin", "a-brand-new-password-2")
+    _boot(monkeypatch, db, pw="a-brand-new-password-2", reset=True)
+    assert staffauth.authenticate(db, "admin", "a-brand-new-password-2").username == "admin"
+    assert db.scalar(select(AuditLog).where(AuditLog.action == "staff.bootstrap_reset"))

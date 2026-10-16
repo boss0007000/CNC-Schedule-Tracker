@@ -11,6 +11,13 @@
   <fieldset><legend>Cleanup checklist (required)</legend>
     {% for key, label in items %}<div class="check"><input id="{{ key }}" type="checkbox" name="{{ key }}" {% if v.get(key) %}checked{% endif %}><label for="{{ key }}">{{ label }}</label></div>{% endfor %}
   </fieldset>
+  <fieldset><legend>When you leave, is anything staying in the machine?</legend>
+    {% set ls = v.get('leave_state', 'clear') %}
+    <div class="check"><input id="ls1" type="radio" name="leave_state" value="clear" {% if ls == 'clear' %}checked{% endif %}><label for="ls1">No: the machine is clear</label></div>
+    <div class="check"><input id="ls2" type="radio" name="leave_state" value="tools" {% if ls == 'tools' %}checked{% endif %}><label for="ls2">Only my tools are in it: <strong>do not touch</strong></label></div>
+    <div class="check"><input id="ls3" type="radio" name="leave_state" value="setup" {% if ls == 'setup' %}checked{% endif %}><label for="ls3">My setup is in it: <strong>do not touch</strong></label></div>
+    <p class="help">Everyone will see it on the schedule page and the TV. It lasts a limited number of open days, and we'll remind you to come back.</p>
+  </fieldset>
   <label for="sc">Shop code</label>
   <input id="sc" name="shop_code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" required>
   <p class="help">The 4-digit code shown on the TV.</p>

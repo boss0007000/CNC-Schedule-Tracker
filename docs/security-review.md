@@ -18,6 +18,8 @@ Checked by automated tests (`tests/test_m9_hardening.py`) unless noted.
 | Audit | Append-only (ORM guard + Postgres trigger); records staff logins, approvals, overrides, settings diffs, exports, purges. |
 | Privacy | Student ID optional and off by default; retention purge with preview; no third-party scripts/fonts/analytics. |
 
+**Phone numbers (a deliberate decision)** Students must provide a number to reserve; it is shown to signed-in students on the schedule page and, for the current user and next booking, on the shop TV. That departs from the original "no student PII beyond first name and last initial on the TV" rule. Mitigations: explicit acknowledgement checkbox stored with a timestamp; the number is never written to the audit log; TV display can be switched off (Settings); numbers are deleted with a student by the retention purge. Confirm this with the department/IT (FERPA) before use.
+
 **Known limits / recommendations**
 * Rate limits key on client IP (`X-Forwarded-For` when `TRUSTED_PROXY=true`). Campus NAT can make many students share an IP; limits are set generously (120 POST/min/IP).
 * No CAPTCHA by design (honeypot + limits). If abuse appears, tighten limits in `web.public_post_guard`.

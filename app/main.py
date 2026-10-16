@@ -37,15 +37,27 @@ def _configure_logging():
 
 
 def bootstrap(db):
-    from app.services import shopconfig
+    """Base data on every boot; first admin from env vars (and an env-driven password reset for recovery)."""
+    from sqlalchemy import func
+
+    from app.services import audit, shopconfig, staffauth
     shopconfig.ensure_base_data(db)
     c = get_config()
-    if c.bootstrap_admin_username and c.bootstrap_admin_password:
-        if db.scalar(select(StaffUser).limit(1)) is None:
-            from app.services import staffauth
-            staffauth.create_user(db, c.bootstrap_admin_username, c.bootstrap_admin_password, "admin",
-                                  display_name="Administrator")
-            log.info("bootstrapped first admin %s", c.bootstrap_admin_username)
+    if not (c.bootstrap_admin_username and c.bootstrap_admin_password):
+        return
+    uname = c.bootstrap_admin_username.strip().lower()
+    existing = db.scalar(select(StaffUser).where(func.lower(StaffUser.username) == uname))
+    any_staff = db.scalar(select(StaffUser.id).limit(1)) is not None
+    if existing is None and (not any_staff or c.bootstrap_reset):
+        staffauth.create_user(db, uname, c.bootstrap_admin_password, "admin", display_name="Administrator")
+        log.warning("bootstrap: created admin account %r", uname)
+    elif existing is not None and c.bootstrap_reset:
+        staffauth.set_password(db, existing, c.bootstrap_admin_password, "system:bootstrap")
+        existing.active, existing.role, existing.failed_logins, existing.locked_until = True, "admin", 0, None
+        audit.record(db, "system:bootstrap", "staff.bootstrap_reset", "staff_user", existing.id)
+        log.warning("bootstrap: reset password for %r (remove BOOTSTRAP_RESET now)", uname)
+    else:
+        log.warning("bootstrap: account %r not changed (accounts already exist; set BOOTSTRAP_RESET=true to reset it)", uname)
 
 
 def create_app() -> FastAPI:
@@ -61,6 +73,8 @@ def create_app() -> FastAPI:
         with dbm.session_scope() as s:
             try:
                 bootstrap(s)
+            except UserError as e:
+                log.error("BOOTSTRAP ADMIN NOT CREATED: %s", e.message)
             except Exception:  # noqa: BLE001 - tables may not exist yet (pre-migration)
                 log.exception("bootstrap skipped")
         sched = jobs.start() if get_config().scheduler_enabled and get_config().env != "test" else None
@@ -143,7 +157,7 @@ def create_app() -> FastAPI:
     from app.routers import public, verify
     app.include_router(public.router)
     app.include_router(verify.router)
-    for mod in ("submit", "reserve", "checkin", "my", "tv", "admin_core", "admin_ops", "admin_reports"):
+    for mod in ("submit", "reserve", "checkin", "my", "schedule", "requests", "holds", "tv", "admin_core", "admin_ops", "admin_reports"):
         try:
             m = __import__(f"app.routers.{mod}", fromlist=["router"])
         except ModuleNotFoundError as e:

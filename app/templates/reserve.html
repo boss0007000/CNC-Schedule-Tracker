@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import errors, csrf %}
+{% from "_contact.html" import contact_fields %}
 {% block content %}
 <h1>Reserve a machine</h1>
 <p class="muted">Signed in as {{ student.full_name }}. You need an approved project and a current certification for the machine.</p>
@@ -29,7 +30,8 @@
       </div>
     </fieldset>
     <label for="ns">How many consecutive slots?</label>
-    <select id="ns" name="nslots">{% for i in range(1, cfg.max_reservation_slots + 1) %}<option value="{{ i }}" {% if nslots == i %}selected{% endif %}>{{ i }} × {{ cfg.slot_minutes }} min</option>{% endfor %}</select>
+    <select id="ns" name="nslots">{% for i in range(1, max_slots + 1) %}<option value="{{ i }}" {% if nslots == i %}selected{% endif %}>{{ i }} × {{ cfg.slot_minutes }} min</option>{% endfor %}</select>
+    {% if result.needs_contact %}{{ contact_fields(student, form_values, required=True) }}{% endif %}
     {% if result.needs_waiver %}
     <fieldset><legend>Safety waiver</legend><p>{{ cfg.waiver_text }}</p>
       <div class="check"><input id="aw" type="checkbox" name="accept_waiver" required><label for="aw">I have read and accept the safety waiver.</label></div></fieldset>
