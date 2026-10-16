@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import errors, csrf %}
+{% from "_macros.html" import errors, csrf with context %}
 {% block content %}
 {% if new %}<div class="success" role="status"><strong>Reservation confirmed.</strong> We emailed you the details and a cancel link.</div>{% endif %}
 {{ errors(errs) }}

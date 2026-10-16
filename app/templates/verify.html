@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import errors, field, csrf %}
+{% from "_macros.html" import errors, field, csrf with context %}
 {% block content %}
 <h1>Verify your campus email</h1>
 <p>We'll email you a 6-digit code. Once verified you won't be asked again for 8 hours on this device.</p>

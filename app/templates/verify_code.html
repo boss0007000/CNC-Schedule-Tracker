@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import errors, csrf %}
+{% from "_macros.html" import errors, csrf with context %}
 {% block content %}
 <h1>Enter your code</h1>
 <p>We sent a 6-digit code to <strong>{{ email }}</strong>. It expires in 10 minutes. Check spam if you don't see it.</p>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import errors, field, csrf %}
+{% from "_macros.html" import errors, field, csrf with context %}
 {% from "_contact.html" import contact_fields %}
 {% block content %}
 <h1>{% if project %}Update your project{% else %}Submit a project{% endif %}</h1>
