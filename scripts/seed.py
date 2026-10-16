@@ -44,8 +44,10 @@ def seed_demo(db) -> dict:
                     description="Demo machine - edit in Admin > Machines")
         db.add(m)
         machines[name] = m
-    for name, level in [("Haas VF-3", "advanced"), ("Haas ST-10", "advanced"), ("Fibercell FC50", "staff_only")]:
-        machines[name].access_level = level
+    from app.services import access
+    for name, m_ in machines.items():
+        choice = {"Haas VF-3": "advanced", "Haas ST-10": "advanced", "Fibercell FC50": "staff_only"}.get(name, "standard")
+        access.set_machine_levels(db, "seed", m_, access.CHOICES[choice])
     db.flush()
 
     staff = {

@@ -1,6 +1,6 @@
 # Test and load summary
 
-**Suite:** 406 tests, all passing — `406 passed` on SQLite (`pytest -q`).
+**Suite:** 416 tests, all passing — `416 passed` on SQLite (`pytest -q`).
 The same suite passes against a real **PostgreSQL 16** (embedded via `python -m scripts.pg_test`, run per file). The Alembic migration
 (including the Postgres audit-log trigger) was applied to Postgres by the load-test harness; `alembic check` shows no drift.
 Not tested: the real Brevo/Resend APIs, a real hosted Render/Neon deployment, ClamAV, and a physical TV/phones.

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import clock
 from app.models import Reservation, ShopSession
-from app.services import contact, qr, rotcode, shop, status
+from app.services import access, contact, qr, rotcode, shop, status
 from app.services import settings as shop_settings
 
 
@@ -88,7 +88,7 @@ def tv_payload(db: Session, now: datetime | None = None) -> dict:
                          "next_phone": contact.pretty(st.next_phone) if (cfg.tv_show_phone and st.next_user) else None,
                          "hold_kind": st.hold_kind,
                          "hold_until": clock.to_local(st.hold_until).strftime("%a %I:%M %p").replace(" 0", " ") if st.hold_until else None,
-                         "staff_run": m.access_level == "staff_only",
+                         "staff_run": access.is_staff_run(m),
                          "qr": f"/qr/machine/{m.id}.png",
             "id": m.id, "name": m.name, "group": m.group.name if m.group else None, "status": st.status,
             "label": st.label, "user": st.current_user, "remaining_minutes": st.remaining_minutes,
@@ -122,6 +122,12 @@ def admin_overview(db: Session, now: datetime | None = None) -> dict:
                         .order_by(Reservation.start_at)).all()
     pending = db.scalar(select(func.count()).select_from(Project).where(Project.status == PROJECT_SUBMITTED)) or 0
     from app.models import MachineHold
+    from app.models import Machine, ShiftSchedule
+    needs_sup = db.scalar(select(func.count()).select_from(Machine).where(Machine.active.is_(True),
+                                                                          Machine.requires_supervision.is_(True))) or 0
+    has_shift = db.scalar(select(func.count()).select_from(ShiftSchedule).where(
+        ShiftSchedule.end_at > now, ShiftSchedule.start_at < now + timedelta(days=7))) or 0
+    no_shifts = bool(needs_sup and not has_shift)
     waiting_checkins = db.scalar(select(func.count()).select_from(ShopSession).where(ShopSession.status == "pending")) or 0
     active_holds = db.scalars(select(MachineHold).where(MachineHold.released_at.is_(None), MachineHold.expires_at > now)
                               .order_by(MachineHold.expires_at)).all()
@@ -131,4 +137,4 @@ def admin_overview(db: Session, now: datetime | None = None) -> dict:
     overdue = [s for s in active if now > s.expected_end_at]
     return {"board": status.board(db, now), "active": active, "flagged": flagged, "todays": todays,
             "pending": pending, "overdue": overdue,
-            "waiting_checkins": waiting_checkins, "holds": active_holds, "expired_holds": expired_holds}
+            "no_shifts": no_shifts, "waiting_checkins": waiting_checkins, "holds": active_holds, "expired_holds": expired_holds}

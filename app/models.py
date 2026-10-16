@@ -161,6 +161,17 @@ class Machine(Base):
     override_by: Mapped[str | None] = mapped_column(String(60))
     sort_order: Mapped[int] = mapped_column(default=0)
     group: Mapped[MachineGroup | None] = relationship()
+    access_rows: Mapped[list["MachineAccess"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
+
+
+class MachineAccess(Base):
+    """Which student groups (access-list levels) may book a machine. No rows + access_level 'staff_only' = staff-run."""
+    __tablename__ = "machine_access"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    machine_id: Mapped[int] = mapped_column(ForeignKey("machines.id", ondelete="CASCADE"), index=True)
+    level: Mapped[str] = mapped_column(String(20))  # approved | super_approved
+    __table_args__ = (UniqueConstraint("machine_id", "level"),
+                      CheckConstraint("level in ('approved','super_approved')", name="ck_machine_access_level"))
 
 
 class Project(Base):

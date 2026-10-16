@@ -578,8 +578,10 @@ def access_page(request: Request, user: StaffUser = Depends(monitor), db: Sessio
     r = access.roster(db)
     known = {s.email: s.full_name for s in db.scalars(select(Student).where(Student.email.in_(
         [x.email for lst in r.values() for x in lst] or [""])))}
+    machines_ = projects.active_machines(db)
     return render(request, "admin/access.html", {"roster": r, "known": known, "A": ACCESS_APPROVED, "S": ACCESS_SUPER,
-                                                 "msg": request.query_params.get("msg")})
+                                                 "msg": request.query_params.get("msg"), "machines": machines_,
+                                                 "levels": {m.id: access.machine_levels(m) for m in machines_}})
 
 
 @router.post("/access")
@@ -689,3 +691,21 @@ def checkin_decide(sid: int, action: str, user: StaffUser = Depends(supervisor),
         db.rollback()
         return RedirectResponse(f"/admin/checkins?msg={e.message}", status_code=303)
     return _done(db, f"/admin/checkins?msg={msg}")
+
+
+@router.post("/access/machines")
+def access_machines_save(form=Depends(get_form), user: StaffUser = Depends(admin_only), db: Session = Depends(get_db)):
+    """Tick which machines each group may book. Unticked in both columns = staff-run."""
+    from app.models import ACCESS_APPROVED, ACCESS_SUPER
+    from app.services import access
+    changed = 0
+    for m in projects.active_machines(db):
+        want = set()
+        if form.get(f"a_{m.id}") == "on":
+            want.add(ACCESS_APPROVED)
+        if form.get(f"s_{m.id}") == "on":
+            want.add(ACCESS_SUPER)
+        if want != access.machine_levels(m):
+            access.set_machine_levels(db, staff_actor(user), m, want)
+            changed += 1
+    return _done(db, f"/admin/access?msg=Saved ({changed} machine{'s' if changed != 1 else ''} changed)")

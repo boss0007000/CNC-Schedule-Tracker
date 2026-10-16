@@ -265,6 +265,8 @@ def slots_for(db: Session, student: Student, approval_number: str, machine_id: i
         out["error"], out["code"] = f"The shop is closed on {d.strftime('%A %b %d')}.", "closed"
         return out
     first_error = None
+    reasons: dict[str, UserError] = {}
+    counts: dict[str, int] = {}
     for s, e in grid:
         try:
             ctx = validate(db, student, approval_number, machine_id, s, e, now=now, waiver_accepted=True,
@@ -283,8 +285,16 @@ def slots_for(db: Session, student: Student, approval_number: str, machine_id: i
                              "not_covered", "machine_on_hold", "not_listed", "needs_more_access", "staff_only", "too_long", "cert_missing", "cert_expired", "suspended", "too_far", "weekly_count",
                              "weekly_hours", "group_limit", "machine_unavailable", "maintenance", "emergency"):
                 first_error = first_error or ex
+            if ex.code not in ("overlap", "past"):
+                reasons.setdefault(ex.code, ex)
+                counts[ex.code] = counts.get(ex.code, 0) + 1
     if not any(s["state"] == "open" for s in out["slots"]) and first_error:
         out["error"], out["code"] = first_error.message, first_error.code
+    elif not out["slots"] and counts:
+        code_ = max(counts, key=counts.get)  # the most common reason every slot failed
+        out["error"], out["code"] = reasons[code_].message, code_
+        if code_ == "no_supervisor":
+            out["error"] += " Ask a shop admin to add a supervisor shift (Settings > Supervisor shifts)."
     elif not out["slots"]:
         when = "today" if d == clock.to_local(now).date() else d.strftime("%A %b %d")
         out["error"], out["code"] = (f"There are no open times left {when}. Try another date.", "none_left")

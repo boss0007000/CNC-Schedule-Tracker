@@ -5,6 +5,7 @@
 <div data-refresh="30"></div>
 <h1>Dashboard</h1>
 {{ errors(errs) }}
+{% if no_shifts %}<div class="errors" role="alert"><strong>No supervisor shifts are scheduled for the next 7 days.</strong> Machines marked "needs a supervisor" can't be booked until a shift exists. <a class="btn small" href="/admin/settings">Add shifts</a></div>{% endif %}
 {% if waiting_checkins %}<div class="errors" role="alert"><strong>{{ waiting_checkins }} check-in{{ 's' if waiting_checkins != 1 }} waiting for a supervisor.</strong> <a class="btn small" href="/admin/checkins">Review now</a></div>{% endif %}
 {% if cfg.emergency_active %}
 <div class="errors" role="alert"><strong>EMERGENCY CLOSE ACTIVE.</strong> {{ cfg.emergency_message }}

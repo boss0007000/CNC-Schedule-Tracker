@@ -25,7 +25,8 @@ When a student checks in they enter their reservation and the TV code, then wait
 
 ## Who may use which machine (access lists)
 * **Admin/Supervisor > Access** holds two lists: **Approved** and **Super approved**. A student must be on a list to book anything. Paste several emails at once; students never see which list anyone is on.
-* Each machine has a **"Who can book it"** setting (Admin > Machines): *everyone on a list*, *super approved only*, or *staff-run*. Staff-run machines (for example the Fibercell FC50) cannot be booked by students, who submit parts for them on the project form; you make the part.
+* **Admin > Access > "Which machines can each group use?"** is a grid: tick the machines the **Approved** group may book and the machines the **Super approved** group may book. Untick both for a staff-run machine. (The simple "Who can book it" dropdown on Admin > Machines sets both columns at once; renaming a machine never resets the grid.)
+* Staff-run example: Staff-run machines (for example the Fibercell FC50) cannot be booked by students, who submit parts for them on the project form; you make the part.
 * Longest single session: 6 hours (approved) and 12 hours (super approved), editable in Settings. There are no weekly caps; the project approval is the gate.
 * Only an admin can add to or remove from the super approved list.
 

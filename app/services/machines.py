@@ -60,6 +60,9 @@ def save_machine(db: Session, actor: str, machine: Machine | None, data: dict) -
         for k, v in vals.items():
             setattr(machine, k, v)
     db.flush()
+    from app.services import access
+    if before is None or (before.get("access_level") != level):  # the simple dropdown sets both groups at once
+        access.set_machine_levels(db, actor, machine, access.CHOICES[level])
     audit.record(db, actor, "machine.create" if before is None else "machine.update", "machine", machine.id,
                  before, audit.snapshot(machine, FIELDS))
     return machine

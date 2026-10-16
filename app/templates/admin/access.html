@@ -4,6 +4,16 @@
 <h1>Access lists</h1>
 {% if msg %}<div class="notice" role="status">{{ msg }}</div>{% endif %}
 <p>Students must be on one of these lists to book a machine. <strong>Approved</strong> students can book the machines marked "everyone on a list" (sessions up to the regular limit). <strong>Super approved</strong> students can book every student-bookable machine (longer sessions). Students never see which list anyone is on. Staff-run machines can't be booked by anyone here; students submit parts for them.</p>
+<h2>Which machines can each group use?</h2>
+<form method="post" action="/admin/access/machines" class="card">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="tablewrap"><table><tr><th>Machine</th><th>Approved</th><th>Super approved</th><th></th></tr>
+{% for m in machines %}<tr><td>{{ m.name }}</td>
+<td><input type="checkbox" name="a_{{ m.id }}" {% if A in levels[m.id] %}checked{% endif %} {% if staff.role != 'admin' %}disabled{% endif %} aria-label="{{ m.name }}: Approved group may book"></td>
+<td><input type="checkbox" name="s_{{ m.id }}" {% if S in levels[m.id] %}checked{% endif %} {% if staff.role != 'admin' %}disabled{% endif %} aria-label="{{ m.name }}: Super approved group may book"></td>
+<td>{% if not levels[m.id] %}<span class="pill s-under_maintenance">Staff-run: students submit parts only</span>{% endif %}</td></tr>{% endfor %}</table></div>
+<p class="help">Untick both for a staff-run machine. Students can still submit parts for it. {% if staff.role != 'admin' %}Only an admin can change this.{% endif %}</p>
+{% if staff.role == 'admin' %}<button type="submit">Save machine access</button>{% endif %}</form>
 {% for level, title in [(S, 'Super approved'), (A, 'Approved')] %}
 <h2>{{ title }} ({{ roster[level]|length }})</h2>
 <div class="tablewrap"><table><tr><th>Email</th><th>Name (once they have signed in)</th><th>Added by</th><th>Note</th><th></th></tr>

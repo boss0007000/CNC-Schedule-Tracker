@@ -610,3 +610,86 @@ def test_reserve_page_jumps_to_times_and_always_says_why_nothing_is_shown(client
     today = clock.to_local(clock.now()).date()
     none = client.get(f"/reserve?approval={a.number}&machine={machine(db, MM1).id}&date={today}").text
     assert "no open times left today" in unescape(none)
+
+
+# ============================================================ per-group machine matrix + never-silent time list
+def test_matrix_lets_staff_pick_machines_per_group(db, w):
+    sam_m = machine(db, MM1)
+    assert access.machine_levels(sam_m) == {"approved", "super_approved"}
+    access.set_machine_levels(db, "staff:admin", machine(db, VF3), {"approved", "super_approved"})  # open the VF-3 to both
+    book(db, w.sam, w.a_sam, VF3, at(1, 10))  # an Approved student can now book it
+    access.set_machine_levels(db, "staff:admin", sam_m, {"super_approved"})  # Mini Mill 1: super approved only
+    assert err(db, w.sam, w.a_sam, MM1, at(1, 12)).code == "needs_more_access"
+    book(db, w.alex, w.a_alex, MM1, at(1, 12))
+    access.set_machine_levels(db, "staff:admin", machine(db, MM2), set())  # staff-run
+    assert err(db, w.alex, w.a_alex, MM2, at(1, 14)).code == "staff_only"
+    row = db.scalar(select(AuditLog).where(AuditLog.action == "machine.access").order_by(AuditLog.id.desc()))
+    assert row.actor == "staff:admin" and row.after == {"groups": []}
+
+
+def test_approved_only_machine_is_possible_too(db, w):
+    access.set_machine_levels(db, "staff:admin", machine(db, MM1), {"approved"})
+    book(db, w.sam, w.a_sam, MM1, at(1, 10))
+    assert err(db, w.alex, w.a_alex, MM1, at(1, 12)).code == "needs_more_access"
+
+
+def test_matrix_page_saves_and_only_admins_edit(db, w):
+    db.commit()
+    adm, sup = login("admin"), login("sam")
+    try:
+        page = adm.get("/admin/access").text
+        assert "Which machines can each group use?" in page and "Haas VF-3" in page
+        data = {"csrf_token": adm.tok}
+        for m in db.scalars(select(Machine).where(Machine.active.is_(True))):
+            data[f"s_{m.id}"] = "on"  # everything: super approved
+            if m.name in (MM1, MM2, VF3):
+                data[f"a_{m.id}"] = "on"  # approved group: mills only
+        assert adm.post("/admin/access/machines", data=data, follow_redirects=False).status_code == 303
+        db.expire_all()
+        assert access.machine_levels(machine(db, VF3)) == {"approved", "super_approved"}
+        assert access.machine_levels(machine(db, ST10)) == {"super_approved"}
+        assert access.machine_levels(machine(db, FC50)) == {"super_approved"}
+        assert sup.post("/admin/access/machines", data={"csrf_token": sup.tok}, follow_redirects=False).status_code == 403
+        assert "disabled" in sup.get("/admin/access").text  # supervisors can look, not change
+    finally:
+        adm.__exit__(None, None, None)
+        sup.__exit__(None, None, None)
+
+
+def test_editing_a_machine_keeps_its_matrix_unless_the_simple_choice_changes(db, w):
+    access.set_machine_levels(db, "staff:admin", machine(db, MM1), {"approved"})
+    db.commit()  # the HTTP app uses its own connection (Postgres would otherwise wait on our row locks)
+    adm = login("admin")
+    try:
+        m = machine(db, MM1)
+        adm.post("/admin/machines/save", data={"csrf_token": adm.tok, "id": str(m.id), "name": "Haas Mini Mill 1 (renamed)",
+                                               "access_level": m.access_level, "active": "on"}, follow_redirects=False)
+        db.expire_all()
+        m = machine(db, "Haas Mini Mill 1 (renamed)")
+        assert access.machine_levels(m) == {"approved"}  # name change did not reset the matrix
+        adm.post("/admin/machines/save", data={"csrf_token": adm.tok, "id": str(m.id), "name": m.name,
+                                               "access_level": "staff_only", "active": "on"}, follow_redirects=False)
+        db.expire_all()
+        assert access.is_staff_run(machine(db, "Haas Mini Mill 1 (renamed)"))
+    finally:
+        adm.__exit__(None, None, None)
+
+
+def test_new_machine_defaults_to_both_groups(db, w):
+    from app.services import machines as ms
+    m = ms.save_machine(db, "staff:admin", None, {"name": "Band Saw", "requires_certification": False})
+    assert access.machine_levels(m) == {"approved", "super_approved"}
+
+
+def test_no_open_times_always_says_why_even_when_no_supervisor_is_scheduled(db, w):
+    from app.models import ShiftSchedule
+    db.query(ShiftSchedule).delete()
+    db.commit()
+    day = clock.to_local(at(1, 10)).date()
+    res = rs.slots_for(db, w.alex, w.a_alex.number, machine(db, VF3).id, day)
+    assert res["slots"] == [] and "supervisor" in res["error"].lower() and "Supervisor shifts" in res["error"]
+    sup = login("sam")
+    try:
+        assert "No supervisor shifts are scheduled" in sup.get("/admin").text
+    finally:
+        sup.__exit__(None, None, None)

@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.errors import UserError
-from app.models import ACCESS_APPROVED, ACCESS_SUPER, AccessRoster, Machine, Student
+from app.models import ACCESS_APPROVED, ACCESS_SUPER, AccessRoster, Machine, MachineAccess, Student
 from app.services import audit
 from app.services import settings as shop_settings
 
@@ -27,15 +27,45 @@ def effective_level(db: Session, student: Student) -> str | None:
     return lvl
 
 
+def machine_levels(machine: Machine) -> set[str]:
+    """The groups allowed to book this machine (explicit rows win; legacy access_level is the fallback)."""
+    if machine.access_rows:
+        return {r.level for r in machine.access_rows}
+    return {"staff_only": set(), "advanced": {ACCESS_SUPER}}.get(machine.access_level, {ACCESS_APPROVED, ACCESS_SUPER})
+
+
+def is_staff_run(machine: Machine) -> bool:
+    return not machine_levels(machine)
+
+
 def machine_allows(level: str | None, machine: Machine) -> bool:
-    if machine.access_level == "staff_only" or level is None:
-        return False
-    return machine.access_level != "advanced" or level == ACCESS_SUPER
+    return level is not None and level in machine_levels(machine)
+
+
+def set_machine_levels(db: Session, actor: str, machine: Machine, levels: set[str]) -> None:
+    """Choose which groups may book a machine. Empty = staff-run (students submit parts only)."""
+    levels = set(levels)
+    if not levels <= {ACCESS_APPROVED, ACCESS_SUPER}:
+        raise UserError("Unknown group.")
+    before = sorted(machine_levels(machine))
+    for row in list(machine.access_rows):
+        machine.access_rows.remove(row)
+    db.flush()
+    for lv in sorted(levels):
+        machine.access_rows.append(MachineAccess(level=lv))
+    # keep the legacy summary column in step (used for labels)
+    machine.access_level = ("staff_only" if not levels else "advanced" if levels == {ACCESS_SUPER} else "standard")
+    db.flush()
+    if before != sorted(levels):
+        audit.record(db, actor, "machine.access", "machine", machine.id, {"groups": before}, {"groups": sorted(levels)})
+
+
+CHOICES = {"standard": {ACCESS_APPROVED, ACCESS_SUPER}, "advanced": {ACCESS_SUPER}, "staff_only": set()}
 
 
 def check_access(db: Session, student: Student, machine: Machine) -> str:
     """Raise a kind, specific UserError, or return the student's level."""
-    if machine.access_level == "staff_only":
+    if is_staff_run(machine):
         raise UserError(f"The {machine.name} is run by shop staff. Submit your part on the project form and the "
                         f"staff will make it for you.", code="staff_only", field="machine")
     lvl = effective_level(db, student)
