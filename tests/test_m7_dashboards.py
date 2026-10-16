@@ -391,3 +391,43 @@ def test_tv_says_closed_instead_of_open_now_after_hours(client, db, demo):
     assert m["status"] == "available" and m["free_label"].startswith("Opens Thu 8:00 AM")
     js = open("app/static/tv.js", encoding="utf-8").read()
     assert "'Shop closed'" in js and "'Closed'" in js
+
+
+# ============================================================ week view block on the TV
+def test_tv_week_block_has_seven_days_and_one_row_per_machine(client, db, demo):
+    d = client.get("/tv/data").json()
+    wk = d["week"]
+    assert len(wk["days"]) == 7 and wk["days"][0]["today"] is True
+    assert [m["name"] for m in wk["machines"]] == [m["name"] for m in d["machines"]]
+    assert all(len(m["cells"]) == 7 for m in wk["machines"])
+    weekend = [i for i, x in enumerate(wk["days"]) if x["label"] in ("Sat", "Sun")]
+    for m in wk["machines"]:
+        for i in weekend:
+            assert m["cells"][i]["closed"] is True and m["cells"][i]["states"] == []
+
+
+def test_tv_week_block_shows_booked_inuse_hold_and_down_without_names(client, db, demo):
+    from app.services import holds
+    alex = student(db, "alex")
+    a = db.scalar(select(Approval).where(Approval.student_id == alex.id))
+    shop_settings.set_value(db, "max_active_per_group", 9)
+    book(db, alex, a, "Haas Mini Mill 1", at(1, 10), 3)  # Thursday 10-13
+    book(db, alex, a, "Haas Mini Mill 2", at(0, 15), 1)
+    holds.declare(db, student(db, "jordan"), machine(db, "Haas VF-3"), "tools", via="staff", actor="staff:sam", now=at(0, 20))
+    machine(db, "Haas ST-10").maintenance_state = "under_maintenance"
+    db.commit()
+    wk = client.get("/tv/data").json()["week"]
+    cells = {m["name"]: m["cells"] for m in wk["machines"]}
+    thu = cells["Haas Mini Mill 1"][1]
+    assert thu["states"][:2] == ["free", "free"] and thu["states"][2:5] == ["booked"] * 3 and thu["free_hours"] == 11.0
+    today = cells["Haas Mini Mill 2"][0]
+    assert today["states"][:2] == ["past", "past"] and "booked" in today["states"]  # 10 AM now: earlier slots are past
+    assert "hold" in cells["Haas VF-3"][0]["states"] and set(cells["Haas ST-10"][0]["states"]) <= {"past", "down"}
+    assert "alex" not in json.dumps(wk).lower() and "jordan" not in json.dumps(wk).lower()
+
+
+def test_tv_page_has_a_separate_week_panel_and_renderer(client):
+    html = client.get("/tv").text
+    assert 'id="week"' in html and html.index('id="grid"') < html.index('id="week"') < html.index('id="qrs"')
+    js = open("app/static/tv.js", encoding="utf-8").read()
+    assert "function weekBlock" in js and "THIS WEEK" in js and "h free" in js

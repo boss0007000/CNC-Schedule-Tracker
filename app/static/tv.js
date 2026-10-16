@@ -83,6 +83,40 @@
   }
 
   function fmtMin(n) { return n >= 120 ? Math.floor(n / 60) + ' h ' + (n % 60 ? (n % 60) + ' min' : '') : n + ' min'; }
+  function weekBlock(wk) {
+    var w = $('week'); w.textContent = '';
+    var head = el('div', 'wk-head');
+    head.appendChild(el('b', '', 'THIS WEEK'));
+    head.appendChild(el('span', 'wk-sub', 'open times by machine'));
+    var lg = el('span', 'wk-legend');
+    [['free', 'Free'], ['booked', 'Booked'], ['inuse', 'In use'], ['hold', 'Do not touch'], ['down', 'Out']].forEach(function (x) {
+      var i = el('i', 'sq ' + x[0]); lg.appendChild(i); lg.appendChild(document.createTextNode(x[1] + ' '));
+    });
+    head.appendChild(lg); w.appendChild(head);
+    var grid = el('div', 'wk-grid');
+    grid.appendChild(el('div', 'wk-name'));
+    wk.days.forEach(function (d) {
+      var h = el('div', 'wk-day' + (d.today ? ' today' : '') + (d.closed ? ' closed' : ''));
+      h.appendChild(el('span', '', d.today ? 'Today' : d.label)); h.appendChild(el('small', '', String(d.date)));
+      grid.appendChild(h);
+    });
+    wk.machines.forEach(function (m) {
+      grid.appendChild(el('div', 'wk-name', m.name));
+      m.cells.forEach(function (c) {
+        var cell = el('div', 'wk-cell' + (c.closed ? ' closed' : ''));
+        if (c.closed) { cell.appendChild(el('span', 'wk-txt', 'Closed')); }
+        else {
+          var strip = el('div', 'wk-strip');
+          c.states.forEach(function (s) { strip.appendChild(el('i', 'seg2 ' + s)); });
+          cell.appendChild(strip);
+          cell.appendChild(el('span', 'wk-txt', m.staff_run ? 'staff' : (c.free_hours + ' h free')));
+        }
+        grid.appendChild(cell);
+      });
+    });
+    w.appendChild(grid);
+  }
+
   function chip(cls, n, label) { var c = el('div', 'chip ' + cls); c.appendChild(el('b', '', String(n))); c.appendChild(el('span', '', label)); return c; }
 
   function render(d) {
@@ -110,6 +144,7 @@
     s.appendChild(chip('c-booked', cnt.booked, 'Reserved'));
     s.appendChild(chip('c-down', cnt.down, 'Unavailable'));
 
+    if (d.week) weekBlock(d.week);
     var grid = $('grid'); grid.textContent = '';
     d.machines.forEach(function (m) { grid.appendChild(card(m, d.window, d.shop_open)); });
 

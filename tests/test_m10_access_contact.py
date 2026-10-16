@@ -245,9 +245,40 @@ def test_phone_collected_on_submit_and_checkin_and_my_page(client, db, w):
 
 
 # ============================================================ schedules
-def test_schedule_requires_sign_in(client):
-    for p in ("/schedule", "/machine/1"):
-        assert client.get(p, follow_redirects=False).status_code == 303
+def test_schedule_pages_need_no_login(client, db, w):
+    book(db, w.jordan, w.a_jordan, MM1, at(1, 10))
+    db.commit()
+    day = clock.to_local(at(1, 10)).date()
+    idx = client.get("/schedule")
+    assert idx.status_code == 200 and "Haas VF-3" in idx.text
+    page = client.get(f"/machine/{machine(db, MM1).id}?date={day}")
+    assert page.status_code == 200 and "Jordan L." in page.text
+    assert "(530) 555-0102" in page.text and "tel:+15305550102" in page.text  # numbers are shown, as requested
+    for leak in ("@csuchico.edu", "APR-2026", "RSV-", "super approved"):
+        assert leak.lower() not in page.text.lower()
+    assert "Sign in to reserve a time" in page.text
+    assert 'name="robots" content="noindex' in page.text
+    robots = client.get("/robots.txt").text
+    assert "Disallow: /schedule" in robots and "Disallow: /machine/" in robots
+    assert client.get("/machine/9999").status_code == 404
+
+
+def test_public_schedule_can_hide_phone_numbers_but_students_still_see_them(client, db, w):
+    book(db, w.jordan, w.a_jordan, MM1, at(1, 10))
+    shop_settings.set_value(db, "public_schedule_show_phone", False)
+    db.commit()
+    day = clock.to_local(at(1, 10)).date()
+    url = f"/machine/{machine(db, MM1).id}?date={day}"
+    anon = client.get(url).text
+    assert "Jordan L." in anon and "5305550102" not in anon and "555-0102" not in anon
+    verify_student(client, w.alex.email, "Alex Rivera")
+    assert "tel:+15305550102" in client.get(url).text  # a signed-in student still can call
+
+
+def test_public_schedule_lookups_are_rate_limited_per_address(client, db, w):
+    url = f"/machine/{machine(db, MM1).id}"
+    codes = [client.get(url).status_code for _ in range(302)]
+    assert codes.count(200) == 300 and codes[-1] in (400, 429)
 
 
 def test_schedule_always_shows_phone_numbers_of_other_students(client, db, w):

@@ -21,10 +21,7 @@
   </header>
   <section class="summary" id="summary" aria-label="Summary"></section>
   <main id="grid" class="grid" aria-live="off"></main>
-  <div class="legend" aria-hidden="true">
-    <span><i class="lg inuse"></i>In use</span><span><i class="lg booked"></i>Booked</span>
-    <span><i class="lg overdue"></i>Overdue</span><span><i class="lg hold"></i>Do not touch</span><span><i class="lg down"></i>Out of service</span>
-  </div>
+  <section id="week" class="week" aria-label="This week: availability by machine"></section>
   <footer class="qrs" id="qrs"></footer>
 </div>
 <script src="{{ asset('tv.js') }}"></script>

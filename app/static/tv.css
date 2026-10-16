@@ -101,3 +101,39 @@ body{background-image:linear-gradient(rgba(56,214,255,.045) 1px,transparent 1px)
 .s-on_hold .rt .badge{font-size:calc(1.35 * var(--u));padding:calc(.2 * var(--u)) .5vw;letter-spacing:.01em}.s-on_hold .who,.s-on_hold .ph{font-size:calc(1.7 * var(--u));flex-wrap:nowrap}.s-on_hold .mqr img{width:calc(4.4 * var(--u));height:calc(4.4 * var(--u))}
 .card.closed{--c:var(--down)}
 .top>.brand{overflow:hidden}.meta{flex-wrap:wrap;row-gap:0}
+
+/* ---- week block: its own panel under the machine cards ---- */
+.week{background:var(--panel);border:1px solid var(--line);border-radius:calc(1.1 * var(--u));padding:calc(.6 * var(--u)) calc(1 * var(--u));flex:none}
+.wk-head{display:flex;align-items:baseline;gap:1.2vw;margin-bottom:calc(.4 * var(--u))}
+.wk-head b{font-size:calc(1.7 * var(--u));letter-spacing:.2em;color:var(--cyan)}
+.wk-sub{font-size:calc(1.3 * var(--u));color:var(--dim)}
+.wk-legend{margin-left:auto;font-size:calc(1.1 * var(--u));color:var(--dim);white-space:nowrap}
+.sq{display:inline-block;width:calc(1.6 * var(--u));height:calc(1 * var(--u));border-radius:.3vh;margin:0 .4vw 0 .8vw;vertical-align:middle}
+.sq.free,.seg2.free{background:var(--free)}.sq.booked,.seg2.booked{background:var(--booked)}.sq.inuse,.seg2.inuse{background:var(--inuse)}
+.sq.hold,.seg2.hold{background:var(--insp)}.sq.down,.seg2.down{background:#59616b}.seg2.past{background:#1d2733}
+.wk-grid{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(7,minmax(0,1fr));gap:calc(.35 * var(--u)) calc(.5 * var(--u));align-items:center}
+.wk-name{font-size:calc(1.45 * var(--u));font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wk-day{text-align:center;font-size:calc(1.35 * var(--u));font-weight:700;line-height:1.05}.wk-day small{display:block;font-size:calc(1.1 * var(--u));color:var(--dim);font-weight:600}
+.wk-day.today{color:var(--cyan)}.wk-day.closed{color:var(--dim)}
+.wk-cell{min-width:0}.wk-strip{display:flex;gap:1px;height:calc(1.1 * var(--u))}.seg2{flex:1;border-radius:1px;min-width:0}
+.wk-txt{display:block;text-align:center;font-size:calc(1.15 * var(--u));color:var(--dim);margin-top:.15vh;white-space:nowrap}
+.wk-cell.closed .wk-txt{margin:0;color:#6b7a8c}
+@media (min-aspect-ratio:1/1){.week{grid-column:1/-1}}
+
+/* portrait: the week block carries the legend, so drop the duplicate legend and the count strip to give the cards room */
+@media (max-aspect-ratio:1/1){.summary{display:none}.wk-sub{display:none}}
+.wk-head b{white-space:nowrap}
+.wk-grid{grid-template-columns:minmax(0,2.1fr) repeat(7,minmax(0,1fr))}
+.wk-name{font-size:calc(1.3 * var(--u))}
+.week{padding:calc(.5 * var(--u)) calc(1 * var(--u))}
+/* v5 portrait density: cards get a little less chrome so five fit above the week block */
+.code{padding:calc(.1 * var(--u)) 2vw}.big{font-size:calc(3.4 * var(--u))}.brand h1{font-size:calc(2.7 * var(--u))}
+.name{font-size:calc(2.1 * var(--u))}.who,.ph{font-size:calc(1.6 * var(--u))}.det{font-size:calc(1.3 * var(--u))}
+.avatar{width:calc(3.8 * var(--u));height:calc(3.8 * var(--u));font-size:calc(1.7 * var(--u))}
+.tl{height:calc(1.3 * var(--u))}.ticks{height:calc(1.2 * var(--u));margin-top:0}.tick{font-size:calc(1.1 * var(--u))}
+.rt .badge{font-size:calc(1.7 * var(--u))}.rt .big-num{font-size:calc(2.2 * var(--u))}
+.mqr img{width:calc(4.4 * var(--u));height:calc(4.4 * var(--u))}
+.card .body{padding:calc(.3 * var(--u)) 1.4vw;gap:0}
+.wk-txt{font-size:calc(1 * var(--u))}.wk-strip{height:calc(.9 * var(--u))}.wk-grid{row-gap:calc(.15 * var(--u))}
+.qr img{width:calc(5.2 * var(--u));height:calc(5.2 * var(--u))}.qr b{font-size:calc(1.3 * var(--u))}
+.drift{gap:calc(.8 * var(--u))}.grid{gap:calc(.7 * var(--u))}

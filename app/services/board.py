@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import clock
-from app.models import Reservation, ShopSession
+from app.models import MachineHold, MaintenanceRecord, Reservation, ShopSession
 from app.services import access, contact, qr, rotcode, shop, status
 from app.services import settings as shop_settings
 
@@ -55,6 +55,56 @@ def _timeline(db: Session, rows, now: datetime) -> tuple[dict, dict]:
     return {"start": ep(w0), "end": ep(w1), "now": ep(now), "ticks": ticks}, segs
 
 
+def week_payload(db: Session, rows, now: datetime, days: int = 7) -> dict:
+    """Availability of every machine for the next `days` days, one cell per day, one block per slot.
+    Public-safe: no names, only free / booked / in use / hold / down / past / closed."""
+    from datetime import time as dtime
+    cfg = shop_settings.load(db)
+    today = clock.to_local(now).date()
+    day_list = [today + timedelta(days=i) for i in range(days)]
+    ids = [m.id for m, _ in rows]
+    w0, w1 = clock.local_dt(today, dtime(0)), clock.local_dt(today + timedelta(days=days), dtime(0))
+    res = db.scalars(select(Reservation).where(Reservation.machine_id.in_(ids), Reservation.status.in_(("confirmed", "checked_in")),
+                                               Reservation.start_at < w1, Reservation.end_at > w0)).all()
+    holds_ = db.scalars(select(MachineHold).where(MachineHold.machine_id.in_(ids), MachineHold.released_at.is_(None),
+                                                  MachineHold.expires_at > now)).all()
+    windows = db.scalars(select(MaintenanceRecord).where(MaintenanceRecord.machine_id.in_(ids), MaintenanceRecord.closed_at.is_(None),
+                                                         MaintenanceRecord.window_start.is_not(None),
+                                                         MaintenanceRecord.window_start < w1, MaintenanceRecord.window_end > w0)).all()
+    out_days, grids = [], {}
+    for d in day_list:
+        g = shop.slot_grid(db, d, cfg.slot_minutes)
+        grids[d] = g
+        out_days.append({"label": d.strftime("%a"), "date": d.day, "today": d == today, "closed": not g})
+    machines = []
+    for m, st in rows:
+        cells = []
+        for d in day_list:
+            g = grids[d]
+            if not g:
+                cells.append({"closed": True, "states": [], "free_hours": 0})
+                continue
+            states, free = [], 0
+            for s, e in g:
+                if e <= now:
+                    state = "past"
+                elif (d == today and (cfg.emergency_active or m.maintenance_state == "under_maintenance"
+                                      or m.override_status in ("under_maintenance", "awaiting_inspection"))) \
+                        or any(x.machine_id == m.id and x.window_start < e and x.window_end > s for x in windows):
+                    state = "down"
+                elif any(h.machine_id == m.id and h.expires_at > s for h in holds_):
+                    state = "hold"
+                else:
+                    hit = next((r for r in res if r.machine_id == m.id and r.start_at < e and r.end_at > s), None)
+                    state = "free" if hit is None else ("inuse" if hit.status == "checked_in" else "booked")
+                if state == "free":
+                    free += cfg.slot_minutes
+                states.append(state)
+            cells.append({"closed": False, "states": states, "free_hours": round(free / 60, 1)})
+        machines.append({"id": m.id, "name": m.name, "staff_run": access.is_staff_run(m), "cells": cells})
+    return {"days": out_days, "machines": machines}
+
+
 def tv_payload(db: Session, now: datetime | None = None) -> dict:
     """No emails, student IDs or last names: first name + last initial only."""
     now = now or clock.now()
@@ -101,7 +151,7 @@ def tv_payload(db: Session, now: datetime | None = None) -> dict:
         "supervisor": public_name(sup.display_name or sup.username) if sup else None,
         "emergency": {"active": bool(cfg.emergency_active), "message": cfg.emergency_message},
         "code": {"value": code["code"], "seconds_left": code["seconds_left"]},
-        "machines": machines, "shop_name": cfg.shop_name, "window": window,
+        "machines": machines, "shop_name": cfg.shop_name, "window": window, "week": week_payload(db, rows, now),
         "qr": [{"label": lbl, "hint": hint, "img": f"/qr/{key}.png", "url": qr.url_for(path)}
                for key, lbl, hint, path in qr.FLOWS],
     }

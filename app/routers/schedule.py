@@ -8,26 +8,33 @@ from sqlalchemy.orm import Session
 from app import clock, security
 from app.db import get_db
 from app.models import Machine, Reservation, ShopSession, Student
-from app.services import access, audit, contact, holds, projects, shop, status
+from app.services import access, audit, contact, holds, identity, projects, shop, status
 from app.services import settings as shop_settings
 from app.web import public_post_guard, render, student_required
 
 router = APIRouter(dependencies=[Depends(public_post_guard)])
 
 
+def _viewer(request: Request, db: Session):
+    """Schedules need no login. If the visitor happens to be signed in we personalise a little (their own bookings)."""
+    return identity.current_student(db, request)
+
+
 @router.get("/schedule")
-def schedule_index(request: Request, student: Student = Depends(student_required), db: Session = Depends(get_db)):
+def schedule_index(request: Request, db: Session = Depends(get_db)):
     rows = status.board(db)
-    return render(request, "schedule_index.html", {"rows": rows})
+    return render(request, "schedule_index.html", {"rows": rows, "student": _viewer(request, db)})
 
 
 @router.get("/machine/{mid}")
-def machine_schedule(mid: int, request: Request, date: str = "", student: Student = Depends(student_required),
-                     db: Session = Depends(get_db)):
+def machine_schedule(mid: int, request: Request, date: str = "", db: Session = Depends(get_db)):
+    student = _viewer(request, db)
     m = db.get(Machine, mid)
     if m is None or not m.active:
         raise HTTPException(404, "That machine wasn't found.")
-    security.rate_check(db, f"sched:{student.id}", 200, 3600, "You're looking things up very quickly. Please wait a bit.")
+    # no login required, so limit lookups per person (or per network address) to blunt scraping of the page
+    who_key = f"sched:{student.id}" if student else f"sched:ip:{security.client_ip(request)}"
+    security.rate_check(db, who_key, 300, 3600, "You're looking things up very quickly. Please wait a bit.")
     cfg = shop_settings.load(db)
     today = clock.to_local(clock.now()).date()
     try:
@@ -41,21 +48,23 @@ def machine_schedule(mid: int, request: Request, date: str = "", student: Studen
         Reservation.machine_id == mid, Reservation.start_at < end, Reservation.end_at > start,
         Reservation.status.in_(("confirmed", "checked_in", "completed"))).order_by(Reservation.start_at)).all()
     now = clock.now()
+    show_phone = bool(cfg.public_schedule_show_phone or student)  # signed-in students always see numbers
     items, shown = [], 0
     for r in rows:
-        mine = r.student_id == student.id
-        can_contact = (not mine and bool(r.student.phone) and r.status in ("confirmed", "checked_in"))
+        mine = bool(student and r.student_id == student.id)
+        can_contact = (not mine and show_phone and bool(r.student.phone) and r.status in ("confirmed", "checked_in"))
         can_ask = (not mine and r.status == "confirmed" and r.start_at > now and r.student.allow_requests)
         if can_contact:
             shown += 1
         items.append({"r": r, "mine": mine, "who": r.student.public_name, "contact": can_contact, "ask": can_ask,
-                      "live": r.status == "checked_in", "phone": contact.pretty(r.student.phone),
-                      "no_number": not mine and not r.student.phone and r.status in ("confirmed", "checked_in")})
+                      "live": r.status == "checked_in", "phone": contact.pretty(r.student.phone) if show_phone else "",
+                      "no_number": not mine and show_phone and not r.student.phone and r.status in ("confirmed", "checked_in")})
     hold = holds.active_hold(db, mid, now)
-    if hold and hold.student.phone and hold.student_id != student.id:
+    if hold and show_phone and hold.student.phone and not (student and hold.student_id == student.id):
         shown += 1
     if shown:
-        audit.record(db, f"student:{student.email}", "contact.view", "machine", mid, after={"numbers_shown": shown})
+        audit.record(db, f"student:{student.email}" if student else "public", "contact.view", "machine", mid,
+                     after={"numbers_shown": shown})
     grid = shop.slot_grid(db, day, cfg.slot_minutes, m.location_id)
     open_slots = [(s, e) for s, e in grid if e > now and not any(x["r"].start_at < e and x["r"].end_at > s for x in items
                                                               if x["r"].status != "completed")]
@@ -65,4 +74,5 @@ def machine_schedule(mid: int, request: Request, date: str = "", student: Studen
         "m": m, "day": day, "prev": day - timedelta(days=1) if day > today else None,
         "next": day + timedelta(days=1) if day < today + timedelta(days=cfg.max_advance_days) else None,
         "items": items, "open_slots": open_slots, "state": state, "on_now": sess, "today": today,
-        "hold": hold, "hold_phone": contact.pretty(hold.student.phone) if hold else "", "student": student, "bookable": access.machine_allows(access.effective_level(db, student), m)})
+        "hold": hold, "hold_phone": contact.pretty(hold.student.phone) if (hold and show_phone) else "", "student": student,
+        "show_phone": show_phone, "bookable": bool(student) and access.machine_allows(access.effective_level(db, student), m)})

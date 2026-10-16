@@ -37,7 +37,8 @@ DEFAULTS: dict[str, object] = {
     "setup_hold_max_business_days": 3,  # a setup may stay in a machine this many open days (the day you leave counts as day 1)
     "tools_hold_max_business_days": 1,  # only-my-tools-in-it
     "closing_prompt_minutes": 30,  # before closing, ask people still on a machine if anything is staying
-    "tv_show_phone": True,  # numbers of the current user / next booking shown on the shop TV
+    "tv_show_phone": True,
+    "public_schedule_show_phone": True,  # the schedule page needs no login; untick to hide numbers from non-students  # numbers of the current user / next booking shown on the shop TV
     "require_supervisor_checkin": True,  # a supervisor must approve each student check-in
     "supervisor_checkin_wait_minutes": 20,  # a waiting request expires after this long
     "early_checkin_max_minutes": 120,  # check in early when the machine is idle and nobody else is booked first
@@ -80,6 +81,7 @@ SETTING_META: list[tuple[str, str, str]] = [
     ("setup_hold_max_business_days", "int", "Setup hold: max open days a setup may stay in a machine"),
     ("tools_hold_max_business_days", "int", "Tools-only hold: max open days"),
     ("closing_prompt_minutes", "int", "Ask people still on a machine about leftovers this long before closing (min)"),
+    ("public_schedule_show_phone", "bool", "Show phone numbers on the public (no login) schedule page"),
     ("tv_show_phone", "bool", "Show phone numbers on the shop TV (current user + next booking)"),
     ("require_supervisor_checkin", "bool", "A supervisor must approve each student check-in"),
     ("supervisor_checkin_wait_minutes", "int", "Waiting check-in requests expire after (minutes)"),

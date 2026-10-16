@@ -33,6 +33,9 @@ When a student checks in they enter their reservation and the TV code, then wait
 ## Setups and tools left in a machine
 Students mark "only my tools" or "my setup" when they check out (or from the email link sent before closing). The machine then shows **DO NOT TOUCH** with the owner's number on the schedule page and TV. Limits: setup 3 open days, tools 1 open day (Settings). Owners get a friendly reminder each open day. When it expires the machine opens up and you get an email and a dashboard flag so you can put tools aside. Machines > the machine lets you place, extend or release a hold.
 
+## Public schedule and the TV's week view
+Students (and anyone with the link) can open `/schedule` without signing in to see who is booked when; the TV shows a "This week" availability panel under the machine cards. If you don't want phone numbers visible to people who aren't signed in, untick **Settings > Show phone numbers on the public schedule page**.
+
 ## Phone numbers
 Every student must give a number (with an acknowledgement) to reserve. It is shown on the schedule page to signed-in students and on the TV for the current user and the next booking. You can hide numbers on the TV with Settings > "Show phone numbers on the shop TV".
 

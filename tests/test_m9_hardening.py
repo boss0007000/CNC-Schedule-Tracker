@@ -61,7 +61,7 @@ def test_student_pages_require_verification(client):
 
 def test_public_endpoints_are_limited_to_the_expected_set(client):
     public = {"/", "/healthz", "/verify", "/tv", "/tv/data", "/qr/{name}.png", "/approval/{number}", "/approval/{number}/pdf",
-              "/reservation/{ref}", "/admin/login"}
+              "/reservation/{ref}", "/admin/login", "/schedule", "/machine/{mid}", "/robots.txt"}
     gets = [r.path for r in routes(client.app) if "GET" in r.methods]
     for p in gets:
         if p.startswith("/static"):

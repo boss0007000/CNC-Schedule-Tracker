@@ -20,6 +20,8 @@ Checked by automated tests (`tests/test_m9_hardening.py`) unless noted.
 
 **Phone numbers (a deliberate decision)** Students must provide a number to reserve; it is shown to signed-in students on the schedule page and, for the current user and next booking, on the shop TV. That departs from the original "no student PII beyond first name and last initial on the TV" rule. Mitigations: explicit acknowledgement checkbox stored with a timestamp; the number is never written to the audit log; TV display can be switched off (Settings); numbers are deleted with a student by the retention purge. Confirm this with the department/IT (FERPA) before use.
 
+**Public schedule page (a deliberate decision)** `/schedule` and `/machine/<id>` need no login, so first name + last initial and (by default) phone numbers of students with a booking are visible to anyone who has the link. Mitigations: noindex meta tag and `robots.txt`, lookups limited to 300/hour per network address, no emails/approval numbers/access levels ever shown, and a Settings switch ("Show phone numbers on the public schedule page") to hide numbers from non-signed-in visitors while signed-in students still see them. Consider turning it off if the link is shared widely.
+
 **Known limits / recommendations**
 * Rate limits key on client IP (`X-Forwarded-For` when `TRUSTED_PROXY=true`). Campus NAT can make many students share an IP; limits are set generously (120 POST/min/IP).
 * No CAPTCHA by design (honeypot + limits). If abuse appears, tighten limits in `web.public_post_guard`.
