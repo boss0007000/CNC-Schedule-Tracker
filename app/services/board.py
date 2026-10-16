@@ -66,9 +66,19 @@ def tv_payload(db: Session, now: datetime | None = None) -> dict:
     machines = []
     rows = status.board(db, now)
     window, segs = _timeline(db, rows, now)
+    opens_label = None
+    if not is_open:
+        d0 = clock.to_local(now).date()
+        for i in range(0, 9):
+            w2 = shop.hours_for_date(db, d0 + timedelta(days=i))
+            if w2 and w2[0] > now:
+                opens_label = clock.to_local(w2[0]).strftime("%a %I:%M %p").replace(" 0", " ")
+                break
     for m, st in rows:
         free_label = None
-        if st.status == "available":
+        if st.status == "available" and not is_open:
+            free_label = f"Opens {opens_label}" if opens_label else "Closed"
+        elif st.status == "available":
             nxt = st.next_reservation_start
             free_label = f"Free until {_t(nxt)}" if nxt else "Free for the rest of the day"
         machines.append({"timeline": sorted(segs[m.id], key=lambda x: x["s"]), "free_label": free_label,

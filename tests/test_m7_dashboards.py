@@ -381,3 +381,13 @@ def test_tv_timeline_segments_are_anonymous_and_correct(client, db, demo):
     free = next(x for x in d["machines"] if x["name"] == "Haas VF-3")
     assert free["free_label"] == "Free for the rest of the day"
     assert "alex" not in json.dumps(d["machines"][0]["timeline"]).lower()
+
+
+def test_tv_says_closed_instead_of_open_now_after_hours(client, db, demo):
+    clock.freeze(at(0, 22, 14))  # 10:14 PM, after closing
+    d = client.get("/tv/data").json()
+    assert d["shop_open"] is False
+    m = d["machines"][0]
+    assert m["status"] == "available" and m["free_label"].startswith("Opens Thu 8:00 AM")
+    js = open("app/static/tv.js", encoding="utf-8").read()
+    assert "'Shop closed'" in js and "'Closed'" in js

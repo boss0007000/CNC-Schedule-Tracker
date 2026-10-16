@@ -273,7 +273,7 @@ def test_pages_pass_accessibility_checks(client, db, demo):
 def test_tv_is_readable_from_ten_feet_and_not_colour_only():
     css = open("app/static/tv.css", encoding="utf-8").read()
     js = open("app/static/tv.js", encoding="utf-8").read()
-    assert ".badge{font-size:2vh" in css and ".big-num{text-align:right;font-size:3vh" in css  # status word + minutes are large
+    assert "--u:min(1vh,1.7778vw)" in css and css.count("var(--u)") > 100  # scales with height OR width, so any window shape works
     assert "m.label" in js and "'badge'" in js  # every card prints the status as text
     assert "animation:drift" in css  # burn-in protection
     assert "Overdue by" in js and "Time left" in js and "timeline" in js

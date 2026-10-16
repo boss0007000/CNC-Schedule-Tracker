@@ -32,8 +32,8 @@
     return wrap;
   }
 
-  function card(m, w) {
-    var c = el('article', 'card s-' + m.status);
+  function card(m, w, shopOpen) {
+    var c = el('article', 'card s-' + m.status + ((!shopOpen && m.status === 'available') ? ' closed' : ''));
     c.appendChild(el('div', 'stripe'));
     var b = el('div', 'body'), r = el('div', 'row');
     r.appendChild(el('div', m.user ? 'avatar' : 'avatar empty', m.user ? initials(m.user) : (m.status === 'available' ? '\u2713' : '\u2014')));
@@ -48,7 +48,7 @@
       who.appendChild(el('b', '', m.user)); phone(m.user_phone);
       det.textContent = 'Since ' + (m.since || '') + (m.open_ended ? ' \u00b7 nobody booked next' : '');
     } else if (m.status === 'available') {
-      who.appendChild(el('b', '', 'Open now')); det.textContent = m.free_label || '';
+      who.appendChild(el('b', '', shopOpen ? 'Open now' : 'Shop closed')); det.textContent = m.free_label || '';
     } else if (m.status === 'reserved') {
       who.appendChild(el('b', '', 'Held for a booking'));
       det.textContent = m.next_reservation ? 'Starts ' + m.next_reservation : (m.available_at ? 'Free ~' + m.available_at : '');
@@ -62,7 +62,7 @@
     }
     r.appendChild(mid);
     var rt = el('div', 'rt');
-    rt.appendChild(el('div', 'badge', m.label));  // text label: colour is never the only signal
+    rt.appendChild(el('div', 'badge', (!shopOpen && m.status === 'available') ? 'Closed' : m.label));  // text label: colour is never the only signal
     if (m.user && m.status !== 'on_hold') {
       var bn = el('div', 'big-num');
       if (m.status === 'overdue') { bn.textContent = '+' + m.overdue_minutes + ' min'; bn.appendChild(el('small', '', 'Overdue by')); }
@@ -111,7 +111,7 @@
     s.appendChild(chip('c-down', cnt.down, 'Unavailable'));
 
     var grid = $('grid'); grid.textContent = '';
-    d.machines.forEach(function (m) { grid.appendChild(card(m, d.window)); });
+    d.machines.forEach(function (m) { grid.appendChild(card(m, d.window, d.shop_open)); });
 
     var q = $('qrs');
     if (!q.dataset.ready) {
