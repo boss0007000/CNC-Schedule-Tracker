@@ -135,7 +135,13 @@ def create_app() -> FastAPI:
         if request.url.path == "/tv/data" or request.headers.get("accept", "").startswith("application/json"):
             return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
         msg = {404: "That page doesn't exist.", 403: str(exc.detail)}.get(exc.status_code, str(exc.detail))
-        return web.render(request, "error.html", {"title": f"Error {exc.status_code}", "message": msg},
+        retry = None
+        if exc.status_code == 403 and "form expired" in str(exc.detail):
+            # Going 'back' would resubmit the stale form (same bad token). Offer a fresh copy of the same page instead.
+            from urllib.parse import urlparse
+            ref = urlparse(request.headers.get("referer", ""))
+            retry = web.safe_next(ref.path + (f"?{ref.query}" if ref.query else ""), "/") if ref.path else "/"
+        return web.render(request, "error.html", {"title": f"Error {exc.status_code}", "message": msg, "retry_url": retry},
                           status=exc.status_code)
 
     @app.exception_handler(Exception)

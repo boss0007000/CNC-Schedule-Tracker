@@ -199,3 +199,18 @@ def test_bootstrap_reset_recovers_locked_or_forgotten_admin(monkeypatch, db):
     _boot(monkeypatch, db, pw="a-brand-new-password-2", reset=True)
     assert staffauth.authenticate(db, "admin", "a-brand-new-password-2").username == "admin"
     assert db.scalar(select(AuditLog).where(AuditLog.action == "staff.bootstrap_reset"))
+
+
+def test_expired_form_offers_a_fresh_copy_and_logs_why(client, caplog):
+    import logging
+    with caplog.at_level(logging.WARNING, logger="csrf"):
+        client.get("/verify")
+        r = client.post("/verify", data={"csrf_token": "stale", "email": "a@csuchico.edu"},
+                        headers={"referer": "http://testserver/verify?next=/submit", "user-agent": "iPhone Safari"})
+    assert r.status_code == 403 and "Reload the form" in r.text and 'href="/verify?next=/submit"' in r.text
+    assert "history.back" not in r.text
+    msg = next(m for m in caplog.messages if "csrf rejected" in m)
+    assert "path=/verify" in msg and "cookie_present=True" in msg and "iPhone Safari" in msg
+    # no referer: falls back to home, never to an external site
+    r2 = client.post("/verify", data={"csrf_token": "stale"}, headers={"referer": "https://evil.example/x"})
+    assert 'href="/x"' in r2.text or 'href="/"' in r2.text

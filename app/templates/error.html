@@ -2,5 +2,5 @@
 {% block content %}
 <h1>{{ title }}</h1>
 <div class="errors" role="alert">{{ message }}</div>
-<p><a class="btn secondary" href="javascript:history.back()">Go back</a> <a class="btn secondary" href="/">Home</a></p>
+<p>{% if retry_url %}<a class="btn" href="{{ retry_url }}">Reload the form</a> {% else %}<a class="btn secondary" href="javascript:history.back()">Go back</a>{% endif %} <a class="btn secondary" href="/">Home</a></p>
 {% endblock %}

@@ -15,6 +15,9 @@ from app.models import StaffUser, Student
 from app.services import identity, staffauth
 from app.services import settings as shop_settings
 
+import logging
+
+_log = logging.getLogger("csrf")
 BASE = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE / "templates"))
 
@@ -101,6 +104,9 @@ async def csrf_protect(request: Request):
     if request.method == "POST":
         form = await request.form()
         if not security.csrf_ok(request, form.get("csrf_token")):
+            _log.warning("csrf rejected path=%s cookie_present=%s token_present=%s ua=%s", request.url.path,
+                         bool(request.cookies.get(security.CSRF_COOKIE)), bool(form.get("csrf_token")),
+                         request.headers.get("user-agent", "")[:120])
             raise HTTPException(403, "Your form expired. Go back, reload the page and try again.")
 
 
