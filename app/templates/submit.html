@@ -20,9 +20,9 @@
   {{ field('Course', 'course', v.course, required=False) }}
   {{ field('Instructor', 'instructor', v.instructor, required=False) }}
   {{ contact_fields(student, v if v.get("phone") is not none and "phone" in v else None) }}
-  <label for="f_files">Drawings and files <span class="muted">(optional)</span></label>
-  <input id="f_files" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.dxf,.step,.stp,.stl">
-  <p class="help">Up to {{ max_files }} files, 10 MB each: PDF, images, DXF, STEP, STL.</p>
+  <label for="f_files">Part files <span class="muted">(at least one CAD file is required)</span></label>
+  <input id="f_files" type="file" name="files" multiple {% if not project %}required{% endif %}>
+  <p class="help">Up to {{ max_files }} files, {{ max_mb }} MB each: PDF, images, DXF, STEP (.step/.stp), STL. Include a CAD file: STEP, STL or DXF (a PDF drawing is welcome too, but can't be the only file).</p>
   <button class="block" type="submit">{% if project %}Resubmit for review{% else %}Submit project{% endif %}</button>
 </form>
 {% endblock %}

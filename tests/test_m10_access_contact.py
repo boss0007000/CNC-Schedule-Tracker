@@ -220,7 +220,7 @@ def test_phone_collected_on_submit_and_checkin_and_my_page(client, db, w):
     tok = verify_student(client, w.sam.email, "Sam Patel", "sophomore")
     d = {"csrf_token": tok, "form_token": security.new_form_token(), "title": "Part", "description": "A test part for phones.",
          "machine_ids": [str(machine(db, MM1).id)], "estimated_hours": "2", "phone": "530-555-0123", "ack_phone": "on"}
-    assert client.post("/submit", data=d, follow_redirects=False).status_code == 303
+    assert client.post("/submit", data=d, files=[("files", ("p.step", b"ISO-10303-21;\nDATA;\n", "application/octet-stream"))], follow_redirects=False).status_code == 303
     db.expire_all()
     assert student(db, "sam").phone == "+15305550123" and contact.has_contact(student(db, "sam"))
     # a number without the acknowledgement is refused with a clear message

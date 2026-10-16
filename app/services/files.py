@@ -19,7 +19,7 @@ from app.models import FileBlob
 log = logging.getLogger("files")
 
 MAX_FILES = 5
-MAX_BYTES = 10 * 1024 * 1024
+MAX_BYTES = 10 * 1024 * 1024  # default; see max_bytes()
 LINK_TTL_SECONDS = 15 * 60
 
 # extension -> acceptable client-declared MIME types (browsers send octet-stream for most CAD formats)
@@ -50,6 +50,28 @@ class Stored:
     size: int
     sha256: str
     scan_status: str
+
+
+def max_bytes() -> int:
+    return max(1, int(get_config().max_upload_mb)) * 1024 * 1024
+
+
+# CAD formats: browsers report these inconsistently (octet-stream, model/step, empty, x-step...), so the declared
+# MIME type is ignored and the CONTENT is checked instead.
+CAD_EXT = {".dxf", ".step", ".stp", ".stl"}
+
+
+def looks_like_cad(ext: str, data: bytes) -> bool:
+    head = data[:4096]
+    if ext in (".step", ".stp"):
+        return b"ISO-10303-21" in head.upper()
+    if ext == ".stl":
+        if data.lstrip(b"\xef\xbb\xbf \t\r\n")[:5].lower() == b"solid":
+            return True  # ASCII STL
+        return len(data) >= 84 and len(data) >= 84 + 50 * int.from_bytes(data[80:84], "little")  # binary STL
+    if ext == ".dxf":
+        return b"SECTION" in head or data.startswith(b"AutoCAD Binary DXF")
+    return True
 
 
 def sanitize_filename(name: str) -> str:
@@ -93,18 +115,21 @@ def validate(name: str, declared_mime: str | None, data: bytes, allowed_ext: set
     if ext not in allowed:
         raise UserError(f"“{safe}” isn't an accepted file type. Allowed: {', '.join(sorted(allowed))}.", field="files")
     mime = (declared_mime or "").split(";")[0].strip().lower()
-    if mime and mime not in {m.lower() for m in allowed[ext]}:
+    if ext not in CAD_EXT and mime and mime not in {m.lower() for m in allowed[ext]}:
         raise UserError(f"“{safe}” doesn't look like a {ext} file (type {mime}).", field="files")
     if len(data) == 0:
         raise UserError(f"“{safe}” is empty.", field="files")
-    if len(data) > MAX_BYTES:
-        raise UserError(f"“{safe}” is larger than 10 MB.", field="files")
+    if len(data) > max_bytes():
+        raise UserError(f"“{safe}” is larger than {max_bytes() // (1024 * 1024)} MB.", field="files")
     if ext in MAGIC and not any(data.startswith(m) for m in MAGIC[ext]):
         raise UserError(f"“{safe}” isn't a valid {ext[1:].upper()} file.", field="files")
     if ext == ".webp" and data[8:12] != b"WEBP":
         raise UserError(f"“{safe}” isn't a valid WEBP file.", field="files")
     if ext not in MAGIC and data.lstrip()[:12].startswith(BAD_PREFIXES):
         raise UserError(f"“{safe}” contains content that isn't allowed.", field="files")
+    if ext in CAD_EXT and not looks_like_cad(ext, data):
+        raise UserError(f"“{safe}” doesn't look like a valid {ext[1:].upper()} file. Export it again from your CAD "
+                        f"program (STEP AP203/AP214/AP242, ASCII or binary STL, or DXF).", field="files")
     return safe, ext
 
 
@@ -151,11 +176,12 @@ def delete(db: Session, key: str) -> None:
         pass
 
 
-def read_upload(upload, max_bytes: int = MAX_BYTES) -> bytes:
+def read_upload(upload, limit: int | None = None) -> bytes:
     """Read a Starlette UploadFile (sync) refusing to buffer more than the limit."""
-    data = upload.file.read(max_bytes + 1)
-    if len(data) > max_bytes:
-        raise UserError(f"“{sanitize_filename(upload.filename)}” is larger than 10 MB.", field="files")
+    limit = limit or max_bytes()
+    data = upload.file.read(limit + 1)
+    if len(data) > limit:
+        raise UserError(f"“{sanitize_filename(upload.filename)}” is larger than {limit // (1024 * 1024)} MB.", field="files")
     return data
 
 

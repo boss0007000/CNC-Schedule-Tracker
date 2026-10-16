@@ -19,6 +19,7 @@ class Config(BaseSettings):
 
     allowed_email_domain: str = "csuchico.edu"  # default; adminsettings override
 
+    max_upload_mb: int = 10  # per file; STEP assemblies can be large, raise on hosts with enough storage
     storage_backend: str = "fs"  # fs | db  (use "db" on hosts with ephemeral disks)
     upload_dir: str = "./var/uploads"
 

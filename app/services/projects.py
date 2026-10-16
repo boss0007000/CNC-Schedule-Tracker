@@ -66,8 +66,19 @@ def _attach_files(db: Session, project: Project, uploads: list, revision_no: int
     db.flush()
 
 
+CAD_MESSAGE = ("Please attach at least one CAD file (STEP, STL or DXF) so staff can review your part. "
+               "A PDF drawing alone isn't enough.")
+
+
+def _is_cad(upload) -> bool:
+    import os
+    return os.path.splitext(getattr(upload, "filename", "") or "")[1].lower() in files.CAD_EXT
+
+
 def submit(db: Session, student: Student, data: dict, uploads: list) -> Project:
     c = _clean(data, db)
+    if not any(_is_cad(u) for u in uploads):
+        raise UserError(CAD_MESSAGE, field="files")
     now = clock.now()
     p = Project(student_id=student.id, status=PROJECT_SUBMITTED, revision_no=1, created_at=now, updated_at=now, **c)
     db.add(p)
@@ -86,6 +97,10 @@ def resubmit(db: Session, student: Student, project: Project, data: dict, upload
     if project.status != PROJECT_CHANGES:
         raise UserError("This project isn't waiting for changes, so it can't be resubmitted.")
     c = _clean(data, db)
+    import os
+    has_old_cad = any(os.path.splitext(f.original_name)[1].lower() in files.CAD_EXT for f in project.files)
+    if not has_old_cad and not any(_is_cad(u) for u in uploads):
+        raise UserError(CAD_MESSAGE, field="files")
     project.revision_no += 1
     for k, v in c.items():
         setattr(project, k, v)

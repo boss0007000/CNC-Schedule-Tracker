@@ -101,7 +101,7 @@ def test_user_content_is_escaped_in_admin_pages(client, db, demo):
     tok = verify_student(client, "xss@csuchico.edu", "X Y")
     d = {"csrf_token": tok, "form_token": security.new_form_token(), "title": payload + " plate", "description": payload * 2,
          "machine_ids": [str(machine(db, "Haas VF-3").id)], "estimated_hours": "2", "materials": payload}
-    assert client.post("/submit", data=d, follow_redirects=False).status_code == 303
+    assert client.post("/submit", data=d, files=[("files", ("p.step", b"ISO-10303-21;\nDATA;\n", "application/octet-stream"))], follow_redirects=False).status_code == 303
     with TestClient(create_app(), base_url="http://testserver") as sc:
         staff_login(sc, "sam")
         for path in ("/admin/approvals", "/admin/approvals/" + str(db.scalar(select(Approval.project_id).limit(1)) and 3)):

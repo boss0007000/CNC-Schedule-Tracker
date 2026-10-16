@@ -16,7 +16,7 @@ router = APIRouter(dependencies=[Depends(public_post_guard)])
 
 def _ctx(db, v=None, errs=None, project=None):
     return {"machines": projects.active_machines(db), "v": v or {}, "errs": errs or [], "project": project,
-            "max_files": files.MAX_FILES}
+            "max_files": files.MAX_FILES, "max_mb": files.max_bytes() // (1024 * 1024)}
 
 
 def _values(form) -> dict:
