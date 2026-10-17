@@ -68,45 +68,51 @@ def test_can_book_a_late_evening_slot(db, w):
 
 
 # ============================================================ mandatory phone
-def test_phone_is_required_to_reserve(db, w):
-    w.sam.phone, w.sam.phone_ack_at = None, None
+def test_contact_is_optional_unless_the_shop_requires_it(db, w):
+    w.sam.phone, w.sam.phone_ack_at, w.sam.contact_display = None, None, None
+    book_no_waiver_flag(db, w.sam, w.a_sam)  # optional by default: booking works with no contact shared
+    shop_settings.set_value(db, "require_phone_to_reserve", True)
     with pytest.raises(UserError) as e:
-        book_no_waiver_flag(db, w.sam, w.a_sam)
-    assert e.value.code == "phone_required" and "shop TV" in e.value.message
-    w.sam.phone = "+15305550103"  # number but no acknowledgement
-    with pytest.raises(UserError) as e:
-        book_no_waiver_flag(db, w.sam, w.a_sam)
-    assert e.value.code == "phone_required"
-    w.sam.phone_ack_at = clock.now()
-    book_no_waiver_flag(db, w.sam, w.a_sam)
+        rs.create(db, w.sam, w.a_sam.number, machine(db, MM1).id, at(2, 10), at(2, 11), waiver_accepted=True)
+    assert e.value.code == "phone_required" and "phone number or your email" in e.value.message
+    w.sam.contact_display, w.sam.phone_ack_at = "email", clock.now()  # showing their email is enough
+    rs.create(db, w.sam, w.a_sam.number, machine(db, MM1).id, at(2, 10), at(2, 11), waiver_accepted=True)
 
 
 def book_no_waiver_flag(db, stu, a):
     return rs.create(db, stu, a.number, machine(db, MM1).id, at(1, 10), at(1, 11), waiver_accepted=True)
 
 
-def test_slot_list_flags_missing_contact_instead_of_hiding_slots(db, w):
-    w.sam.phone, w.sam.phone_ack_at = None, None
-    res = rs.slots_for(db, w.sam, w.a_sam.number, machine(db, MM1).id, clock.to_local(at(1, 10)).date())
+def test_slot_list_flags_missing_contact_only_when_required(db, w):
+    w.sam.phone, w.sam.phone_ack_at, w.sam.contact_display = None, None, None
+    day = clock.to_local(at(1, 10)).date()
+    res = rs.slots_for(db, w.sam, w.a_sam.number, machine(db, MM1).id, day)
+    assert len(res["slots"]) == 14 and res["needs_contact"] is False
+    shop_settings.set_value(db, "require_phone_to_reserve", True)
+    res = rs.slots_for(db, w.sam, w.a_sam.number, machine(db, MM1).id, day)
     assert len(res["slots"]) == 14 and res["needs_contact"] is True
 
 
-def test_reserve_form_asks_for_phone_and_saves_it(client, db, w):
-    w.sam.phone, w.sam.phone_ack_at = None, None
+def test_reserve_form_offers_optional_contact_and_can_require_it(client, db, w):
+    w.sam.phone, w.sam.phone_ack_at, w.sam.contact_display = None, None, None
     db.commit()
     tok = verify_student(client, w.sam.email, "Sam Patel", "sophomore")
-    base = {"csrf_token": tok, "approval": w.a_sam.number, "machine_id": str(machine(db, MM1).id),
-            "start": at(1, 10).isoformat(), "nslots": "1", "action": "book"}
-    r = client.post("/reserve", data={**base, "form_token": security.new_form_token()})
-    assert r.status_code == 400 and 'name="phone"' in r.text and "shop TV" in unescape(r.text)
-    r = client.post("/reserve", data={**base, "form_token": security.new_form_token(), "phone": "(530) 555-0144",
-                                      "ack_phone": "on"}, follow_redirects=False)
-    assert r.status_code == 303
-    db.expire_all()
-    assert student(db, "sam").phone == "+15305550144"
     day = clock.to_local(at(1, 10)).date()
     page = client.get(f"/reserve?approval={w.a_sam.number}&machine={machine(db, MM1).id}&date={day}").text
-    assert 'name="phone"' not in page  # already on file: no more prompting
+    assert "Add a phone number (optional)" in page and 'name="show_contact"' in page
+    base = {"csrf_token": tok, "approval": w.a_sam.number, "machine_id": str(machine(db, MM1).id),
+            "start": at(1, 10).isoformat(), "nslots": "1", "action": "book"}
+    ok = client.post("/reserve", data={**base, "form_token": security.new_form_token()}, follow_redirects=False)
+    assert ok.status_code == 303  # no contact needed by default
+    shop_settings.set_value(db, "require_phone_to_reserve", True)
+    db.commit()
+    r = client.post("/reserve", data={**base, "start": at(1, 12).isoformat(), "form_token": security.new_form_token()})
+    assert r.status_code == 400 and 'name="show_contact"' in r.text and "phone number or your email" in unescape(r.text)
+    r = client.post("/reserve", data={**base, "start": at(1, 12).isoformat(), "form_token": security.new_form_token(),
+                                      "phone": "(530) 555-0144", "show_contact": "phone"}, follow_redirects=False)
+    assert r.status_code == 303
+    db.expire_all()
+    assert student(db, "sam").phone == "+15305550144" and student(db, "sam").shown_contact[0] == "phone"
 
 
 # ============================================================ holds: rules
@@ -146,7 +152,7 @@ def test_hold_status_phone_and_engine(db, w):
     h = declare(db, w.alex, MM1, "tools", at(0, 20))
     st = status.machine_state(db, machine(db, MM1))
     assert st.status == "on_hold" and st.label == "Do Not Touch" and st.hold_kind == "tools"
-    assert st.current_user == "Alex R." and st.current_phone == "+15305550101" and st.hold_until == h.expires_at
+    assert st.current_user == "Alex R." and st.current_contact == ("phone", "+15305550101") and st.hold_until == h.expires_at
 
 
 def test_hold_blocks_check_in_by_someone_booked_earlier(db, w):
@@ -337,7 +343,7 @@ def test_schedule_and_tv_show_the_hold_with_a_phone_number(client, db, w):
     assert "Do not touch" in page and "Alex R." in page and "(530) 555-0101" in page and "tel:+15305550101" in page
     m = next(x for x in client.get("/tv/data").json()["machines"] if x["name"] == MM1)
     assert m["status"] == "on_hold" and m["label"] == "Do Not Touch" and m["user"] == "Alex R."
-    assert m["user_phone"] == "(530) 555-0101" and m["hold_kind"] == "setup" and m["hold_until"]
+    assert m["user_contact"] == {"kind": "phone", "text": "(530) 555-0101"} and m["hold_kind"] == "setup" and m["hold_until"]
     assert m["timeline"][0]["k"] == "hold"
 
 

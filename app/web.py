@@ -59,6 +59,7 @@ def _asset(name: str) -> str:
 
 templates.env.globals["asset"] = _asset
 templates.env.globals["consent_text"] = _contact.ACK
+templates.env.globals["contact_choices"] = _contact.CHOICES
 templates.env.filters.update(pretty_phone=_contact.pretty, local=_local, localtime=_localtime, localdate=_localdate,
                              localinput=_localinput, hours=_hours)
 

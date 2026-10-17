@@ -1,10 +1,11 @@
 {% macro contact_fields(student, v=None, required=False) %}
 {% set phone = v.get('phone') if (v and 'phone' in v) else (student.phone|pretty_phone if student.phone else '') %}
-<fieldset><legend>Your phone number{% if required %} (required to reserve){% else %} (optional here){% endif %}</legend>
-  <label for="f_phone">Phone number</label>
-  <input id="f_phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="{{ phone }}" {% if required %}required{% endif %} aria-describedby="h_phone">
-  <p class="help" id="h_phone">Other students can call or text you about swapping machine time.</p>
-  <div class="check"><input id="f_ack" type="checkbox" name="ack_phone" {% if (v and v.get('ack_phone')) or (not v and student.phone_ack_at) or (v and 'phone' not in v and student.phone_ack_at) %}checked{% endif %}>
-  <label for="f_ack">{{ consent_text }}</label></div>
+{% set pick = (v.get('show_contact') if (v and 'phone' in v) else (student.contact_display or ('phone' if student.phone_ack_at else 'none'))) %}
+<fieldset><legend>Contact for other students{% if required %} (required to reserve){% else %} (optional){% endif %}</legend>
+  <label for="f_phone">Phone number <span class="muted">(optional)</span></label>
+  <input id="f_phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="{{ phone }}" aria-describedby="h_phone">
+  <p class="help" id="h_phone">Other students may need to reach you if you both want the same machine. {{ consent_text }}</p>
+  <p><strong>Show on the schedule page and shop TV:</strong></p>
+  {% for val, label in contact_choices %}<div class="check"><input id="f_show_{{ val }}" type="radio" name="show_contact" value="{{ val }}" {% if pick == val %}checked{% endif %} {% if required and val == 'none' %}disabled{% endif %}><label for="f_show_{{ val }}">{{ label }}</label></div>{% endfor %}
 </fieldset>
 {% endmacro %}

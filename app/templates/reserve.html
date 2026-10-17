@@ -33,7 +33,8 @@
     </fieldset>
     <label for="ns">How many consecutive slots?</label>
     <select id="ns" name="nslots">{% for i in range(1, max_slots + 1) %}<option value="{{ i }}" {% if nslots == i %}selected{% endif %}>{{ i }} × {{ cfg.slot_minutes }} min</option>{% endfor %}</select>
-    {% if result.needs_contact %}{{ contact_fields(student, form_values, required=True) }}{% endif %}
+    {% if result.needs_contact %}{{ contact_fields(student, form_values, required=True) }}
+    {% elif not student.phone_ack_at %}<details><summary>Add a phone number (optional)</summary>{{ contact_fields(student, form_values) }}</details>{% endif %}
     {% if result.needs_waiver %}
     <fieldset><legend>Safety waiver</legend><p>{{ cfg.waiver_text }}</p>
       <div class="check"><input id="aw" type="checkbox" name="accept_waiver" required><label for="aw">I have read and accept the safety waiver.</label></div></fieldset>

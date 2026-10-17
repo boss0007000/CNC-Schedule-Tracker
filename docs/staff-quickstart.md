@@ -36,8 +36,13 @@ Students mark "only my tools" or "my setup" when they check out (or from the ema
 ## Public schedule and the TV's week view
 Students (and anyone with the link) can open `/schedule` without signing in to see who is booked when; the TV shows a "This week" availability panel under the machine cards. If you don't want phone numbers visible to people who aren't signed in, untick **Settings > Show phone numbers on the public schedule page**.
 
-## Phone numbers
-Every student must give a number (with an acknowledgement) to reserve. It is shown on the schedule page to signed-in students and on the TV for the current user and the next booking. You can hide numbers on the TV with Settings > "Show phone numbers on the shop TV".
+## Contact details on the schedule and TV
+Giving a phone number is **optional**. Each student chooses what other students and the TV may see: their **phone number**, their **campus email**, or **nothing** (if they pick phone but add no number, their email is shown). Nothing is shown unless the student chose it. Staff can always see a student's details on their record. You can hide contacts from the TV (Settings > "Show contacts on the shop TV") or from the public schedule page (Settings > "Show contacts on the public schedule page"); you can also require a contact to reserve (Settings > "Require students to show a contact to reserve", off by default).
+
+## Editing how long someone can be on a machine
+* **Reservations > Edit time** (upcoming or current bookings) and **Sessions > Adjust end time** (someone on the machine now). Both show what that student's approval still allows: hours left, sessions, expiry and their longest single session. A reason is required and the student is emailed.
+* Edits are refused if they would exceed the approval's remaining hours or sessions, run past its expiry, exceed the student's longest allowed session (6 h Approved / 12 h Super approved), overlap another booking, fall outside shop hours or hit a hold/maintenance. To go beyond an approval, edit the approval itself on the project page first.
+* A student already on the machine keeps their start time; only the end changes.
 
 ## Students changing times with each other
 Students can politely ask each other to move a slot (Access/Requests page shows them). Nobody can order anyone, a "no" is never shown to others, and there is no priority setting. If two students can't agree you decide, using Reservations.

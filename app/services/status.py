@@ -38,7 +38,7 @@ class SessionInfo:
     student_name: str  # public form: "Alex R."
     started_at: datetime
     expected_end: datetime
-    phone: str | None = None
+    contact: tuple[str, str] | None = None
 
 
 @dataclass
@@ -47,7 +47,7 @@ class ResInfo:
     end: datetime
     anchor: datetime  # late-arrival grace counts from here
     student_name: str
-    phone: str | None = None
+    contact: tuple[str, str] | None = None
 
 
 @dataclass
@@ -55,7 +55,7 @@ class HoldInfo:
     student_name: str
     kind: str  # setup | tools
     until: datetime
-    phone: str | None = None
+    contact: tuple[str, str] | None = None
 
 
 @dataclass
@@ -84,9 +84,9 @@ class MachineState:
     estimated_available_at: datetime | None = None
     reason: str | None = None
     since: datetime | None = None  # session start (who's on the machine, and since when)
-    current_phone: str | None = None
+    current_contact: tuple[str, str] | None = None
     next_user: str | None = None
-    next_phone: str | None = None
+    next_contact: tuple[str, str] | None = None
     open_ended: bool = False  # past the booked end, but nobody is waiting
     hold_kind: str | None = None
     hold_until: datetime | None = None
@@ -111,7 +111,7 @@ def derive(inp: StatusInputs, now: datetime) -> MachineState:
     def done(status, **kw) -> MachineState:
         return MachineState(status=status, label=LABELS[status], next_reservation_start=nxt,
                             next_user=nxt_user.student_name if nxt_user else None,
-                            next_phone=nxt_user.phone if nxt_user else None, **kw)
+                            next_contact=nxt_user.contact if nxt_user else None, **kw)
 
     if inp.emergency:
         return done(MS_MAINTENANCE, reason="Emergency close")
@@ -129,21 +129,21 @@ def derive(inp: StatusInputs, now: datetime) -> MachineState:
             limit = min(waiting + ([inp.close_at] if inp.close_at else []), default=None)
             deadline = max(s.expected_end, limit) if limit is not None else s.expected_end
             if limit is not None and now <= limit and inp.close_at and now <= inp.close_at:
-                return done(MS_IN_USE, session_deadline=deadline, current_user=s.student_name, since=s.started_at, current_phone=s.phone,
+                return done(MS_IN_USE, session_deadline=deadline, current_user=s.student_name, since=s.started_at, current_contact=s.contact,
                             open_ended=True, remaining_minutes=max(0, -(-int((limit - now).total_seconds()) // 60)),
                             estimated_available_at=limit, reason="Nobody is booked next: keep going until then")
-            return done(MS_OVERDUE, session_deadline=deadline, current_user=s.student_name, since=s.started_at, current_phone=s.phone, remaining_minutes=0,
+            return done(MS_OVERDUE, session_deadline=deadline, current_user=s.student_name, since=s.started_at, current_contact=s.contact, remaining_minutes=0,
                         overdue_minutes=int((now - s.expected_end).total_seconds() // 60),
                         estimated_available_at=now)
         return done(MS_IN_USE, session_deadline=s.expected_end, current_user=s.student_name, since=s.started_at,
-                    current_phone=s.phone, remaining_minutes=max(0, -(-int((s.expected_end - now).total_seconds()) // 60)),  # ceil
+                    current_contact=s.contact, remaining_minutes=max(0, -(-int((s.expected_end - now).total_seconds()) // 60)),  # ceil
                     estimated_available_at=_chain_end(s.expected_end, inp.reservations))
     if inp.hold:
         h = inp.hold
-        return done(MS_HOLD, current_user=h.student_name, current_phone=h.phone, hold_kind=h.kind, hold_until=h.until,
+        return done(MS_HOLD, current_user=h.student_name, current_contact=h.contact, hold_kind=h.kind, hold_until=h.until,
                     reason="Setup in the machine" if h.kind == "setup" else "Tools in the machine")
     if inp.pending:
-        return done(MS_RESERVED, current_user=inp.pending.student_name, current_phone=inp.pending.phone,
+        return done(MS_RESERVED, current_user=inp.pending.student_name, current_contact=inp.pending.contact,
                     reason="Waiting for a supervisor to approve check-in")
     imminent = [r for r in live if r.start - inp.reserved_lead <= now]
     if imminent:
@@ -165,7 +165,7 @@ def load_inputs(db: Session, machines: list[Machine], now: datetime | None = Non
     for r in db.scalars(select(Reservation).where(Reservation.machine_id.in_(ids),
                                                   Reservation.status == RES_CONFIRMED, Reservation.end_at > now,
                                                   Reservation.start_at < horizon).order_by(Reservation.start_at)):
-        by_machine[r.machine_id].append(ResInfo(r.start_at, r.end_at, r.grace_anchor, r.student.public_name, r.student.phone))
+        by_machine[r.machine_id].append(ResInfo(r.start_at, r.end_at, r.grace_anchor, r.student.public_name, r.student.shown_contact))
     pendings = {s.machine_id: s for s in db.scalars(
         select(ShopSession).where(ShopSession.machine_id.in_(ids), ShopSession.status == "pending"))}
     holds = {h.machine_id: h for h in db.scalars(select(MachineHold).where(
@@ -179,11 +179,11 @@ def load_inputs(db: Session, machines: list[Machine], now: datetime | None = Non
         out[m.id] = StatusInputs(
             maintenance_state=m.maintenance_state, override_status=m.override_status,
             override_reason=m.override_reason, emergency=bool(cfg.emergency_active),
-            session=SessionInfo(s.student.public_name, s.checked_in_at, s.expected_end_at, s.student.phone) if s else None,
-            hold=(HoldInfo(holds[m.id].student.public_name, holds[m.id].kind, holds[m.id].expires_at, holds[m.id].student.phone)
+            session=SessionInfo(s.student.public_name, s.checked_in_at, s.expected_end_at, s.student.shown_contact) if s else None,
+            hold=(HoldInfo(holds[m.id].student.public_name, holds[m.id].kind, holds[m.id].expires_at, holds[m.id].student.shown_contact)
                   if m.id in holds else None), close_at=close_at,
             pending=(SessionInfo(pendings[m.id].student.public_name, pendings[m.id].checked_in_at, pendings[m.id].expected_end_at,
-                                 pendings[m.id].student.phone) if m.id in pendings else None),
+                                 pendings[m.id].student.shown_contact) if m.id in pendings else None),
             reservations=by_machine[m.id], reserved_lead=timedelta(minutes=cfg.reserved_lead_minutes),
             grace=timedelta(minutes=cfg.checkin_grace_minutes))
     return out

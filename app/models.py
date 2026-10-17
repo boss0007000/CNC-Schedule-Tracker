@@ -86,10 +86,27 @@ class Student(Base):
     last_verified_at: Mapped[datetime | None]
     noshow_forgiven_at: Mapped[datetime | None]  # staff override: earlier no-shows no longer count
     phone: Mapped[str | None] = mapped_column(String(20))  # +E.164-ish; required to reserve, shown on schedule + TV
-    phone_ack_at: Mapped[datetime | None]  # when they acknowledged their number is shown to other students/the TV
+    phone_ack_at: Mapped[datetime | None]  # when they consented to show a contact (phone or email) to others/the TV
+    contact_display: Mapped[str | None] = mapped_column(String(10))  # phone | email | none (None = legacy: phone if consented)
     allow_requests: Mapped[bool] = mapped_column(default=True, server_default=true())  # time-change requests
     __table_args__ = (CheckConstraint("standing in ('freshman','sophomore','junior','senior','graduate')",
                                       name="ck_student_standing"),)
+
+    @property
+    def shown_contact(self) -> tuple[str, str] | None:
+        """What other students and the TV may see, as (kind, value), or None. The student chooses phone, email or
+        nothing. 'phone' with no number saved falls back to their email, so a contact is always shown once they opt in."""
+        pref = self.contact_display or ("phone" if self.phone_ack_at else "none")
+        if pref == "none":
+            return None
+        if pref == "phone" and self.phone:
+            return ("phone", self.phone)
+        return ("email", self.email)
+
+    @property
+    def shown_phone(self) -> str | None:  # kept for callers that only want a number
+        c = self.shown_contact
+        return c[1] if c and c[0] == "phone" else None
 
     @property
     def first_name(self) -> str:

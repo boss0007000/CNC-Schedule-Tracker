@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app import clock
 from app.errors import UserError
-from app.models import RES_ACTIVE, Machine, Reservation, Student
+from datetime import timedelta as _td  # noqa: F401
+from app.models import RES_ACTIVE, Machine, Reservation, ShopSession, Student
 from app.services import audit, lifecycle, notify, reservations
 from app.services import settings as shop_settings
 
@@ -29,20 +30,47 @@ def manual_create(db: Session, actor: str, email: str, machine_id: int, start: d
     return r
 
 
-def move(db: Session, actor: str, r: Reservation, machine_id: int, start: datetime, end: datetime) -> None:
-    if r.status != "confirmed":
-        raise UserError("Only confirmed reservations can be edited.")
+def set_window(db: Session, actor: str, r: Reservation, machine_id: int, start: datetime, end: datetime,
+               reason: str) -> Reservation:
+    """Change how long (and when) a student may be on a machine, within the limits of THEIR approval:
+    remaining approval hours/sessions, approval expiry, the longest single session for their access group, shop
+    hours, supervisor cover, maintenance/holds and other bookings. A student who is on the machine keeps their start."""
+    if r.status not in ("confirmed", "checked_in"):
+        raise UserError("Only a current or upcoming reservation can be edited.")
+    if len((reason or "").strip()) < 3:
+        raise UserError("Give a short reason (it is recorded and the student is told).", field="reason")
+    now = clock.now()
+    if r.status == "checked_in":
+        start, machine_id = r.start_at, r.machine_id  # they're already on it: only the end time can change
+        if end <= now:
+            raise UserError("The new end time must be in the future (to end the session now use Force check-out).")
     db.execute(select(Machine.id).where(Machine.id == machine_id).with_for_update())
-    reservations.validate(db, r.student, None, machine_id, start, end, exclude_id=r.id, override=True, allow_started=True)
+    reservations.validate(db, r.student, r.approval.number if r.approval else None, machine_id, start, end, now=now,
+                          exclude_id=r.id, allow_started=True, waiver_accepted=True, contact_accepted=True,
+                          override=r.approval_id is None, staff_edit=True)
     before = {"machine_id": r.machine_id, "start": r.start_at, "end": r.end_at}
     old = (r.machine_id, r.start_at, r.end_at)
     r.machine_id, r.start_at, r.end_at = machine_id, start, end
+    sess = db.scalar(select(ShopSession).where(ShopSession.reservation_id == r.id,
+                                               ShopSession.status.in_(("active", "pending"))))
+    if sess:
+        sess.expected_end_at = max(end, now + timedelta(minutes=1))
+        sess.overdue_notified_at = None
     db.flush()
     db.refresh(r)
     audit.record(db, actor, "reservation.edit", "reservation", r.id, before,
-                 {"machine_id": machine_id, "start": start, "end": end})
+                 {"machine_id": machine_id, "start": start, "end": end, "reason": reason.strip()})
     notify.reservation_confirmed(db, r, extended=True)
-    reservations.promote_waitlist(db, old[0], old[1], old[2])
+    if old[2] > end and old[0] == machine_id:  # time was freed up
+        reservations.promote_waitlist(db, machine_id, max(end, now), old[2])
+    elif old[0] != machine_id:
+        reservations.promote_waitlist(db, old[0], old[1], old[2])
+    return r
+
+
+def move(db: Session, actor: str, r: Reservation, machine_id: int, start: datetime, end: datetime,
+         reason: str = "staff edit") -> None:
+    set_window(db, actor, r, machine_id, start, end, reason)
 
 
 def mark_no_show(db: Session, actor: str, r: Reservation) -> None:

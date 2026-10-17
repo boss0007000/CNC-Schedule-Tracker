@@ -199,48 +199,53 @@ def test_bad_phone_numbers_rejected(raw):
         contact.normalize_phone(raw)
 
 
-def test_number_needs_acknowledgement_and_audit_never_stores_it(db, w):
-    w.sam.phone, w.sam.phone_ack_at = None, None
-    with pytest.raises(UserError) as e:
-        contact.update_contact(db, w.sam, "(530) 555-0123", False)
-    assert e.value.field == "ack_phone"
-    contact.update_contact(db, w.sam, "(530) 555-0123", True)
-    assert w.sam.phone == "+15305550123" and w.sam.phone_ack_at and contact.has_contact(w.sam)
-    row = db.scalar(select(AuditLog).where(AuditLog.action == "student.contact_update"))
-    assert "5305550123" not in json.dumps([row.before, row.after])
-    contact.update_contact(db, w.sam, "(530) 555-0123", False)  # unchanged number, already acknowledged: fine
-    contact.update_contact(db, w.sam, "", False)
-    assert w.sam.phone is None and not contact.has_contact(w.sam)
+def test_contact_choice_phone_email_or_nothing_and_audit_never_stores_it(db, w):
+    s = w.sam
+    contact.update_contact(db, s, "(530) 555-0123", "phone")
+    assert s.phone == "+15305550123" and s.shown_contact == ("phone", "+15305550123") and contact.has_contact(s)
+    contact.update_contact(db, s, "(530) 555-0123", "email")  # number kept private, email shown instead
+    assert s.phone == "+15305550123" and s.shown_contact == ("email", s.email)
+    contact.update_contact(db, s, "(530) 555-0123", "none")  # nothing shown, number still on file for staff
+    assert s.shown_contact is None and s.phone == "+15305550123" and not contact.has_contact(s)
+    contact.update_contact(db, s, "", "phone")  # chose phone but gave none: email is shown instead
+    assert s.shown_contact == ("email", s.email)
+    contact.update_contact(db, s, "", "bogus")  # anything unknown means private
+    assert s.shown_contact is None
+    rows = db.scalars(select(AuditLog).where(AuditLog.action == "student.contact_update")).all()
+    blob = json.dumps([[r.before, r.after] for r in rows])
+    assert "5305550123" not in blob and s.email not in blob
 
 
-def test_phone_collected_on_submit_and_checkin_and_my_page(client, db, w):
+def test_contact_collected_on_submit_and_checkin_and_my_page(client, db, w):
     from app import security
-    w.sam.phone, w.sam.phone_ack_at = None, None
+    w.sam.phone, w.sam.phone_ack_at, w.sam.contact_display = None, None, None
     db.commit()
     tok = verify_student(client, w.sam.email, "Sam Patel", "sophomore")
     d = {"csrf_token": tok, "form_token": security.new_form_token(), "title": "Part", "description": "A test part for phones.",
-         "machine_ids": [str(machine(db, MM1).id)], "estimated_hours": "2", "phone": "530-555-0123", "ack_phone": "on"}
-    assert client.post("/submit", data=d, files=[("files", ("p.step", b"ISO-10303-21;\nDATA;\n", "application/octet-stream"))], follow_redirects=False).status_code == 303
+         "machine_ids": [str(machine(db, MM1).id)], "estimated_hours": "2", "phone": "530-555-0123", "show_contact": "phone"}
+    step = [("files", ("p.step", b"ISO-10303-21;\nDATA;\n", "application/octet-stream"))]
+    assert client.post("/submit", data=d, files=step, follow_redirects=False).status_code == 303
     db.expire_all()
-    assert student(db, "sam").phone == "+15305550123" and contact.has_contact(student(db, "sam"))
-    # a number without the acknowledgement is refused with a clear message
-    no_ack = client.post("/submit", data={**d, "form_token": security.new_form_token(), "phone": "530-555-0999", "ack_phone": ""})
-    assert no_ack.status_code == 400 and "Tick the box" in unescape(no_ack.text)
-    # My shop: change number
-    client.post("/my/contact", data={"csrf_token": tok, "phone": "(530) 555-0888", "ack_phone": "on", "allow_requests": "on"})
+    assert student(db, "sam").phone == "+15305550123" and student(db, "sam").shown_contact == ("phone", "+15305550123")
+    # phone given but kept private
+    r = client.post("/my/contact", data={"csrf_token": tok, "phone": "(530) 555-0888", "show_contact": "none", "allow_requests": "on"})
     db.expire_all()
-    assert student(db, "sam").phone == "+15305550888"
-    # check-in form saves it too
-    r = book(db, w.sam, w.a_sam, MM1, at(0, 11))
+    assert student(db, "sam").phone == "+15305550888" and student(db, "sam").shown_contact is None
+    # My shop: show the email instead
+    client.post("/my/contact", data={"csrf_token": tok, "phone": "", "show_contact": "email", "allow_requests": "on"})
+    db.expire_all()
+    assert student(db, "sam").shown_contact == ("email", w.sam.email)
+    # check-in form saves the choice too
+    rr = book(db, w.sam, w.a_sam, MM1, at(0, 11))
     db.commit()
     clock.freeze(at(0, 10, 55))
-    resp = client.post("/checkin", data={"csrf_token": tok, "form_token": security.new_form_token(), "ref": r.ref,
-                                         "shop_code": code(db), "phone": "(530) 555-9999", "ack_phone": "on"},
+    resp = client.post("/checkin", data={"csrf_token": tok, "form_token": security.new_form_token(), "ref": rr.ref,
+                                         "shop_code": code(db), "phone": "(530) 555-9999", "show_contact": "phone"},
                        follow_redirects=False)
     assert resp.status_code == 303
     db.expire_all()
-    assert student(db, "sam").phone == "+15305559999"
-    bad = client.post("/submit", data={**d, "form_token": security.new_form_token(), "phone": "abc"})
+    assert student(db, "sam").shown_contact == ("phone", "+15305559999")
+    bad = client.post("/submit", data={**d, "form_token": security.new_form_token(), "phone": "abc"}, files=step)
     assert bad.status_code == 400 and "valid phone number" in unescape(bad.text)
 
 
@@ -334,7 +339,7 @@ def test_tv_has_machine_qr_and_staff_run_flag(client, db, w):
     assert client.get("/qr/machine/9999.png").status_code == 404
 
 
-def test_tv_shows_phone_of_current_user_and_next_booking_and_can_hide_it(client, db, w):
+def test_tv_shows_contact_of_current_user_and_next_booking_and_can_hide_it(client, db, w):
     r = book(db, w.alex, w.a_alex, MM1, at(0, 11))
     book(db, w.jordan, w.a_jordan, MM1, at(0, 14))
     db.commit()
@@ -342,13 +347,18 @@ def test_tv_shows_phone_of_current_user_and_next_booking_and_can_hide_it(client,
     sessions.check_in(db, w.alex, r.ref, code(db), "1.1.1.1")
     db.commit()
     m = next(x for x in client.get("/tv/data").json()["machines"] if x["name"] == MM1)
-    assert m["user"] == "Alex R." and m["user_phone"] == "(530) 555-0101"
-    assert m["next_user"] == "Jordan L." and m["next_phone"] == "(530) 555-0102"
-    assert "alex.rivera" not in json.dumps(m)  # still no email or last name
+    assert m["user"] == "Alex R." and m["user_contact"] == {"kind": "phone", "text": "(530) 555-0101"}
+    assert m["next_user"] == "Jordan L." and m["next_contact"] == {"kind": "phone", "text": "(530) 555-0102"}
+    assert "alex.rivera" not in json.dumps(m)  # no email unless the student chose to show it
+    # Jordan chooses to show his email instead; Alex shows nothing
+    w.jordan.contact_display, w.alex.contact_display = "email", "none"
+    db.commit()
+    m = next(x for x in client.get("/tv/data").json()["machines"] if x["name"] == MM1)
+    assert m["user_contact"] is None and m["next_contact"] == {"kind": "email", "text": w.jordan.email}
     shop_settings.set_value(db, "tv_show_phone", False)
     db.commit()
     m = next(x for x in client.get("/tv/data").json()["machines"] if x["name"] == MM1)
-    assert m["user_phone"] is None and m["next_phone"] is None and m["user"] == "Alex R."
+    assert m["user_contact"] is None and m["next_contact"] is None and m["user"] == "Alex R."
 
 
 # ============================================================ time-change requests

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_contact.html" import contact_fields %}
 {% block content %}
 <h1>My shop</h1>
 <p>Signed in as <strong>{{ student.full_name }}</strong> ({{ student.email }}).</p>
@@ -17,9 +18,7 @@
 <h2>Contact settings</h2>
 <form method="post" action="/my/contact" class="card">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <label for="mp">Phone number <span class="muted">(optional)</span></label>
-  <input id="mp" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="{{ student.phone|pretty_phone }}">
-  <div class="check"><input id="ms" type="checkbox" name="ack_phone" {% if student.phone_ack_at %}checked{% endif %}><label for="ms">{{ consent_text }}</label></div>
+  {{ contact_fields(student) }}
   <div class="check"><input id="mr" type="checkbox" name="allow_requests" {% if student.allow_requests %}checked{% endif %}><label for="mr">Other students may send me a polite request to change a time slot (I can always say no).</label></div>
   <button type="submit">Save</button>
 </form>

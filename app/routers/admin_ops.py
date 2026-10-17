@@ -206,6 +206,7 @@ def reservations_page(request: Request, view: str = "list", date: str = "", mach
                       q: str = "", user: StaffUser = Depends(monitor), db: Session = Depends(get_db)):
     from datetime import timedelta
     from app.models import Reservation, Student
+    from app.services import reservations as reservations_svc
     from app.services import shop, staffres
     from app.services import settings as shop_settings
     cfg = shop_settings.load(db)
@@ -241,6 +242,14 @@ def reservations_page(request: Request, view: str = "list", date: str = "", mach
             stmt = stmt.join(Student, Student.id == Reservation.student_id).where(
                 Student.email.like(f"%{q.lower()}%") | Student.full_name.like(f"%{q}%") | Reservation.ref.like(f"%{q.upper()}%"))
         ctx["rows"] = db.scalars(stmt.limit(300)).all()
+        from app.services import access as access_svc
+        lim = {}
+        for r in ctx["rows"]:
+            if r.status in ("confirmed", "checked_in") and r.approval:
+                info = reservations_svc.approval_remaining(db, r.approval, exclude_id=r.id)
+                info["cap_hours"] = access_svc.session_cap_hours(db, access_svc.effective_level(db, r.student))
+                lim[r.id] = info
+        ctx["limits"] = lim
     return render(request, "admin/reservations.html", ctx)
 
 
@@ -280,8 +289,8 @@ def reservation_action(rid: int, action: str, form=Depends(get_form), user: Staf
         elif action == "checkin":
             sessions.force_check_in(db, r, actor, form.get("reason", ""))
         elif action == "move":
-            staffres.move(db, actor, r, int(form.get("machine_id") or r.machine_id), _local_dt(form.get("start"), "start"),
-                          _local_dt(form.get("end"), "end"))
+            staffres.set_window(db, actor, r, int(form.get("machine_id") or r.machine_id), _local_dt(form.get("start"), "start"),
+                                _local_dt(form.get("end"), "end"), form.get("reason", ""))
         else:
             raise HTTPException(404, "Unknown action.")
     except (UserError, ValueError) as e:
@@ -709,3 +718,21 @@ def access_machines_save(form=Depends(get_form), user: StaffUser = Depends(admin
             access.set_machine_levels(db, staff_actor(user), m, want)
             changed += 1
     return _done(db, f"/admin/access?msg=Saved ({changed} machine{'s' if changed != 1 else ''} changed)")
+
+
+@router.post("/session-adjust/{sid}")
+def session_adjust(sid: int, form=Depends(get_form), user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+    """Change how long someone on a machine may stay (their reservation end), within their approval's limits."""
+    from app.models import ShopSession
+    from app.services import staffres
+    s = db.get(ShopSession, sid)
+    if s is None or s.reservation is None:
+        raise HTTPException(404, "Session not found.")
+    try:
+        r = s.reservation
+        staffres.set_window(db, staff_actor(user), r, r.machine_id, r.start_at, _local_dt(form.get("end"), "new end time"),
+                            form.get("reason", ""))
+    except UserError as e:
+        db.rollback()
+        return RedirectResponse(f"/admin/sessions?msg={e.message}", status_code=303)
+    return _done(db, "/admin/sessions?msg=End time updated; the student was emailed")

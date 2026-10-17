@@ -5,16 +5,16 @@
 <p><span class="pill s-{{ state.status }}">{{ state.label }}</span>
 {% if on_now %} {{ on_now.student.public_name }} has been on it since {{ on_now.checked_in_at|localtime }}{% if state.estimated_available_at %}, expected free about {{ state.estimated_available_at|localtime }}{% endif %}.{% endif %}</p>
 {% if hold %}<div class="errors" role="alert"><strong>Do not touch:</strong> {{ hold.student.public_name }}'s {{ 'setup' if hold.kind == 'setup' else 'tools' }} {{ 'is' if hold.kind == 'setup' else 'are' }} in this machine until {{ hold.expires_at|local }}.
-{% if (not student or hold.student_id != student.id) and hold.student.phone and show_phone %}<div class="toolbar"><span>{{ hold_phone }}</span><a class="btn small" href="tel:{{ hold.student.phone }}">Call</a><a class="btn small secondary" href="sms:{{ hold.student.phone }}">Text</a></div>{% elif student and hold.student_id == student.id %}<a class="btn small" href="/my">Manage in My shop</a>{% endif %}</div>{% endif %}
+{% if (not student or hold.student_id != student.id) and hold_c and show_phone %}<div class="toolbar"><span>{{ '☎' if hold_c[0] == 'phone' else '✉' }} {{ hold_contact.text }}</span>{% if hold_c[0] == 'phone' %}<a class="btn small" href="tel:{{ hold_c[1] }}">Call</a><a class="btn small secondary" href="sms:{{ hold_c[1] }}">Text</a>{% else %}<a class="btn small" href="mailto:{{ hold_c[1] }}">Email</a>{% endif %}</div>{% elif student and hold.student_id == student.id %}<a class="btn small" href="/my">Manage in My shop</a>{% endif %}</div>{% endif %}
 {% if m.access_level == 'staff_only' %}<div class="notice">This machine is run by shop staff. Submit your part on the <a href="/submit">project form</a> and staff will make it.</div>{% endif %}
 <p>{% if prev %}<a href="?date={{ prev }}">← Previous day</a> · {% endif %}<strong>{{ day.strftime('%A %b %d') }}</strong>{% if next %} · <a href="?date={{ next }}">Next day →</a>{% endif %}</p>
 <h2>Booked</h2>
 {% for it in items %}<div class="card">
   <strong>{{ it.r.start_at|localtime }} – {{ it.r.end_at|localtime }}</strong> · {% if it.mine %}<b>You</b>{% else %}{{ it.who }}{% endif %}
   {% if it.live %}<span class="pill s-in_use">On the machine now</span>{% elif it.r.status == 'completed' %}<span class="muted">(done)</span>{% endif %}
-  {% if it.contact or it.no_number %}<div class="muted">{% if it.phone %}{{ it.phone }}{% else %}No number on file: ask a supervisor{% endif %}</div>{% endif %}
+  {% if it.contact or it.no_number %}<div class="muted">{% if it.contact %}{{ '☎' if it.c[0] == 'phone' else '✉' }} {{ it.contact.text }}{% else %}No contact shared. You can ask to change time below, or ask a supervisor.{% endif %}</div>{% endif %}
   {% if not it.mine and (it.contact or it.ask) %}<div class="toolbar">
-    {% if it.contact %}<a class="btn small" href="tel:{{ it.r.student.phone }}">Call</a><a class="btn small secondary" href="sms:{{ it.r.student.phone }}">Text</a>{% endif %}
+    {% if it.contact %}{% if it.c[0] == 'phone' %}<a class="btn small" href="tel:{{ it.c[1] }}">Call</a><a class="btn small secondary" href="sms:{{ it.c[1] }}">Text</a>{% else %}<a class="btn small" href="mailto:{{ it.c[1] }}">Email</a>{% endif %}{% endif %}
     {% if it.ask %}<a class="btn small secondary" href="/requests/new?res={{ it.r.id }}">Ask to change time</a>{% endif %}
   </div>{% endif %}
 </div>{% else %}<p class="muted">Nothing booked this day.</p>{% endfor %}

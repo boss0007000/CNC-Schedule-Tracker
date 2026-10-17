@@ -88,9 +88,9 @@ def test_overdue_after_closing_time_even_if_nobody_waits():
 
 def test_hold_shows_do_not_touch_when_nobody_is_on_the_machine():
     from app.services.status import HoldInfo
-    h = HoldInfo("Alex R.", "setup", NOW + 2000 * M, "+15305550101")
+    h = HoldInfo("Alex R.", "setup", NOW + 2000 * M, ("phone", "+15305550101"))
     s = derive(StatusInputs(hold=h), NOW)
-    assert s.status == "on_hold" and s.label == "Do Not Touch" and s.hold_kind == "setup" and s.current_phone == "+15305550101"
+    assert s.status == "on_hold" and s.label == "Do Not Touch" and s.hold_kind == "setup" and s.current_contact == ("phone", "+15305550101")
     in_use = derive(StatusInputs(hold=h, session=SessionInfo("Alex R.", NOW - 5 * M, NOW + 55 * M)), NOW)
     assert in_use.status == MS_IN_USE  # while someone is on it, that wins
     assert derive(StatusInputs(hold=h, maintenance_state="under_maintenance"), NOW).status == MS_MAINTENANCE

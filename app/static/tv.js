@@ -40,24 +40,24 @@
     var mid = el('div', 'mid'), nm = el('div', 'name', m.name);
     mid.appendChild(nm);
     var who = el('div', 'who'), det = el('div', 'det');
-    function phone(txt) { if (txt) who.appendChild(el('span', 'ph', '\u260E ' + txt)); }
+    function phone(c) { if (c) who.appendChild(el('span', 'ph', (c.kind === 'email' ? '\u2709 ' : '\u260E ') + c.text)); }
     if (m.status === 'on_hold') {
-      who.appendChild(el('b', '', m.user)); phone(m.user_phone);
+      who.appendChild(el('b', '', m.user)); phone(m.user_contact);
       det.textContent = (m.hold_kind === 'setup' ? 'Setup' : 'Tools') + ' inside \u00b7 until ' + String(m.hold_until).replace(':00', '');
     } else if (m.user && m.status !== 'reserved') {
-      who.appendChild(el('b', '', m.user)); phone(m.user_phone);
+      who.appendChild(el('b', '', m.user)); phone(m.user_contact);
       det.textContent = 'Since ' + (m.since || '') + (m.open_ended ? ' \u00b7 nobody booked next' : '');
     } else if (m.status === 'available') {
       who.appendChild(el('b', '', shopOpen ? 'Open now' : 'Shop closed')); det.textContent = m.free_label || '';
     } else if (m.status === 'reserved') {
-      who.appendChild(el('b', '', m.user ? m.user : 'Held for a booking')); if (m.user) phone(m.user_phone);
+      who.appendChild(el('b', '', m.user ? m.user : 'Held for a booking')); if (m.user) phone(m.user_contact);
       det.textContent = m.user ? (m.reason || '') : (m.next_reservation ? 'Starts ' + m.next_reservation : (m.available_at ? 'Free ~' + m.available_at : ''));
     } else { who.appendChild(el('b', '', m.reason || 'Not available')); }
     mid.appendChild(who);
     if (det.textContent) mid.appendChild(det);
     if (m.next_user && m.status !== 'on_hold') {
       var nx = el('div', 'nx'); nx.appendChild(document.createTextNode('Next ' + (m.next_reservation || '') + ': ')); nx.appendChild(el('b', '', m.next_user));
-      if (m.next_phone) nx.appendChild(document.createTextNode(' \u260E ' + m.next_phone));
+      if (m.next_contact) nx.appendChild(document.createTextNode((m.next_contact.kind === 'email' ? ' \u2709 ' : ' \u260E ') + m.next_contact.text));
       mid.appendChild(nx);
     }
     r.appendChild(mid);

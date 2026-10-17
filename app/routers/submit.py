@@ -39,7 +39,7 @@ def submit_post(request: Request, bg: BackgroundTasks, form=Depends(get_form),
     if replay:
         return RedirectResponse(replay, status_code=303)
     v = _values(form)
-    v["phone"], v["ack_phone"] = form.get("phone", ""), form.get("ack_phone") == "on"
+    v["phone"], v["show_contact"] = form.get("phone", ""), form.get("show_contact", "none")
     try:
         contact.apply_from_form(db, student, form)
         p = projects.submit(db, student, v, form.getlist("files"))

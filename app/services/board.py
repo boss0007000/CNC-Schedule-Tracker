@@ -133,9 +133,9 @@ def tv_payload(db: Session, now: datetime | None = None) -> dict:
             free_label = f"Free until {_t(nxt)}" if nxt else "Free for the rest of the day"
         machines.append({"timeline": sorted(segs[m.id], key=lambda x: x["s"]), "free_label": free_label,
                          "since": _t(st.since), "open_ended": st.open_ended,
-                         "user_phone": contact.pretty(st.current_phone) if (cfg.tv_show_phone and st.current_user) else None,
+                         "user_contact": contact.display(st.current_contact) if (cfg.tv_show_phone and st.current_user) else None,
                          "next_user": st.next_user,
-                         "next_phone": contact.pretty(st.next_phone) if (cfg.tv_show_phone and st.next_user) else None,
+                         "next_contact": contact.display(st.next_contact) if (cfg.tv_show_phone and st.next_user) else None,
                          "hold_kind": st.hold_kind,
                          "hold_until": clock.to_local(st.hold_until).strftime("%a %I:%M %p").replace(" 0", " ") if st.hold_until else None,
                          "staff_run": access.is_staff_run(m),

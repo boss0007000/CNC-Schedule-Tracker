@@ -26,9 +26,12 @@
 <form class="inline" method="post" action="/admin/reservations/{{ r.id }}/release" data-confirm="Release this slot silently?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary">Release</button></form>
 <form class="inline" method="post" action="/admin/reservations/{{ r.id }}/noshow" data-confirm="Mark as no-show?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary">No-show</button></form>
 <form class="inline" method="post" action="/admin/reservations/{{ r.id }}/checkin"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input name="reason" aria-label="Reason to force check-in" placeholder="Reason to force check-in" required class="sm w11"><button class="small">Force check-in</button></form>
-<details><summary>Edit</summary><form method="post" action="/admin/reservations/{{ r.id }}/move"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<details><summary>Edit time</summary>{% set l = limits.get(r.id) %}
+{% if l %}<p class="help">Approval {{ r.approval.number }}: {% if l.max_hours is not none %}{{ l.left_hours|hours }} of {{ l.max_hours|hours }} h left (not counting this booking){% else %}no hour cap{% endif %}{% if l.max_sessions %} · {{ l.used_sessions }}/{{ l.max_sessions }} sessions{% endif %} · expires {{ l.expires_at|localdate }} · longest single session {{ l.cap_hours|hours }} h. Edits beyond these are refused.</p>{% endif %}
+<form method="post" action="/admin/reservations/{{ r.id }}/move"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label>Machine<select name="machine_id">{% for m in machines %}<option value="{{ m.id }}" {% if m.id == r.machine_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
-<label>Start<input type="datetime-local" name="start" value="{{ r.start_at|localinput }}"></label><label>End<input type="datetime-local" name="end" value="{{ r.end_at|localinput }}"></label><button class="small">Save</button></form></details>
+<label>Start<input type="datetime-local" name="start" value="{{ r.start_at|localinput }}"></label><label>End<input type="datetime-local" name="end" value="{{ r.end_at|localinput }}"></label>
+<label>Reason (the student is told)<input name="reason" required></label><button class="small">Save</button></form></details>
 {% endif %}</td></tr>{% else %}<tr><td colspan="6">No reservations.</td></tr>{% endfor %}</table></div>
 {% endif %}
 {% if staff.role != 'monitor' %}

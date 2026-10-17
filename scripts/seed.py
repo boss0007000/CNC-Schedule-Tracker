@@ -73,7 +73,7 @@ def seed_demo(db) -> dict:
     ]:
         key = email.split(".")[0]
         s = Student(email=email, full_name=name, standing=standing, course=course, phone=phones[key],
-                    phone_ack_at=clock.now())  # demo numbers (555-01xx) are fictional
+                    phone_ack_at=clock.now(), contact_display="phone")  # demo numbers (555-01xx) are fictional
         db.add(s)
         students[key] = s
     for key, level in {"alex": "super_approved", "jordan": "super_approved", "sam": "approved", "riley": "approved"}.items():

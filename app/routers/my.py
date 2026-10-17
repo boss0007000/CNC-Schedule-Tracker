@@ -53,7 +53,7 @@ def my(request: Request, joined: int = 0, msg: str = "", student: Student = Depe
 def my_contact(request: Request, form=Depends(get_form), student: Student = Depends(student_required),
                db: Session = Depends(get_db)):
     try:
-        contact.update_contact(db, student, form.get("phone"), form.get("ack_phone") == "on",
+        contact.update_contact(db, student, form.get("phone"), form.get("show_contact", "none"),
                                form.get("allow_requests") == "on")
     except UserError as e:
         db.rollback()

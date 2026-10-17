@@ -76,7 +76,7 @@ Data model: [docs/data-model.md](docs/data-model.md). Security review: [docs/sec
 * **Access:** two staff-managed lists (approved: sessions up to 6 h, standard machines; super approved: up to 12 h, all student-bookable machines). Staff-run machines accept project submissions only. The 12-hour figure is a setting (you mentioned 14 earlier).
 * **Holds:** "setup" or "tools only" left in a machine blocks others for a capped number of open days (3 / 1), with daily reminders and a closing-time prompt.
 * **Schedules are public** (no login): see docs/security-review.md. The TV shows the machines plus a separate "This week" availability block (no names).
-* **Phone numbers** are required to reserve and are displayed on the schedule page and TV (see docs/security-review.md).
+* **Contact details** are optional: each student picks phone, email or nothing to show on the schedule page and TV (see docs/security-review.md). Staff can edit a booking's time within the student's approval limits (Reservations > Edit time, Sessions > Adjust end time).
 * **Time-change requests** between students are optional asks, one tap to accept or decline, no priority or ranking anywhere.
 * Not built (designed for): SSO, ID-card scanning, hardware access control, tool inventory, multi-location UI (`location_id` columns exist).
 * **Data policy:** confirm FERPA/retention/hosting with the department and campus IT before using real student data.

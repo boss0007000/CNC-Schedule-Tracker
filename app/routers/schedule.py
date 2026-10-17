@@ -52,15 +52,16 @@ def machine_schedule(mid: int, request: Request, date: str = "", db: Session = D
     items, shown = [], 0
     for r in rows:
         mine = bool(student and r.student_id == student.id)
-        can_contact = (not mine and show_phone and bool(r.student.phone) and r.status in ("confirmed", "checked_in"))
+        c = r.student.shown_contact if show_phone else None
+        can_contact = (not mine and c is not None and r.status in ("confirmed", "checked_in"))
         can_ask = (not mine and r.status == "confirmed" and r.start_at > now and r.student.allow_requests)
         if can_contact:
             shown += 1
         items.append({"r": r, "mine": mine, "who": r.student.public_name, "contact": can_contact, "ask": can_ask,
-                      "live": r.status == "checked_in", "phone": contact.pretty(r.student.phone) if show_phone else "",
-                      "no_number": not mine and show_phone and not r.student.phone and r.status in ("confirmed", "checked_in")})
+                      "live": r.status == "checked_in", "contact": contact.display(c) if not mine else None, "c": c,
+                      "no_number": not mine and c is None and r.status in ("confirmed", "checked_in")})
     hold = holds.active_hold(db, mid, now)
-    if hold and show_phone and hold.student.phone and not (student and hold.student_id == student.id):
+    if hold and show_phone and hold.student.shown_contact and not (student and hold.student_id == student.id):
         shown += 1
     if shown:
         audit.record(db, f"student:{student.email}" if student else "public", "contact.view", "machine", mid,
@@ -74,5 +75,5 @@ def machine_schedule(mid: int, request: Request, date: str = "", db: Session = D
         "m": m, "day": day, "prev": day - timedelta(days=1) if day > today else None,
         "next": day + timedelta(days=1) if day < today + timedelta(days=cfg.max_advance_days) else None,
         "items": items, "open_slots": open_slots, "state": state, "on_now": sess, "today": today,
-        "hold": hold, "hold_phone": contact.pretty(hold.student.phone) if (hold and show_phone) else "", "student": student,
+        "hold": hold, "hold_contact": (contact.display(hold.student.shown_contact) if (hold and show_phone) else None), "hold_c": (hold.student.shown_contact if (hold and show_phone) else None), "student": student,
         "show_phone": show_phone, "bookable": bool(student) and access.machine_allows(access.effective_level(db, student), m)})

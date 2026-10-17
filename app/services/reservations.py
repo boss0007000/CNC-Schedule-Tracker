@@ -37,6 +37,14 @@ def find_approval(db: Session, student: Student, number: str) -> Approval:
     return a
 
 
+def approval_remaining(db: Session, a: Approval, exclude_id: int | None = None) -> dict:
+    """What an approval still allows (so staff can see the limits before editing a time)."""
+    used_h, used_n = approval_usage(db, a, exclude_id)
+    return {"max_hours": a.max_total_hours, "used_hours": used_h,
+            "left_hours": None if a.max_total_hours is None else max(0.0, a.max_total_hours - used_h),
+            "max_sessions": a.max_sessions, "used_sessions": used_n, "expires_at": a.expires_at}
+
+
 def approval_usage(db: Session, a: Approval, exclude_id: int | None = None) -> tuple[float, int]:
     q = select(Reservation).where(Reservation.approval_id == a.id, Reservation.status.in_(RES_COUNTED))
     if exclude_id:
@@ -111,7 +119,7 @@ class Ctx:
 def validate(db: Session, student: Student, approval_number: str | None, machine_id: int, start: datetime,
              end: datetime, *, now: datetime | None = None, waiver_accepted: bool = False,
              ignore_overlap: bool = False, exclude_id: int | None = None, allow_started: bool = False,
-             override: bool = False, contact_accepted: bool = False) -> Ctx:
+             override: bool = False, contact_accepted: bool = False, staff_edit: bool = False) -> Ctx:
     now = now or clock.now()
     cfg = shop_settings.load(db)
     machine = db.get(Machine, machine_id)
@@ -178,9 +186,9 @@ def validate(db: Session, student: Student, approval_number: str | None, machine
             raise UserError("Please read and accept the safety waiver to continue.", code="waiver_required")
 
     # 4b. a phone number is required to reserve: other students can call about the machine
-    if not override and not contact_accepted and not (student.phone and student.phone_ack_at):
-        raise UserError("Please add your phone number. It is shown to other students on the schedule page and the shop TV "
-                        "while you have a booking, so they can reach you about the machine.", code="phone_required",
+    if cfg.require_phone_to_reserve and not override and not contact_accepted and not student.shown_contact:
+        raise UserError("Please choose a contact to show (your phone number or your email). It appears on the schedule page "
+                        "and the shop TV while you have a booking, so other students can reach you about the machine.", code="phone_required",
                         field="phone")
 
     # 5. slot rules
@@ -215,6 +223,8 @@ def validate(db: Session, student: Student, approval_number: str | None, machine
 
     # 6. fairness
     if not override:
+        if staff_edit:  # staff adjusting an existing booking: approval, cap and slot rules still apply, behaviour rules don't
+            return Ctx(approval, machine, needs_waiver=False)
         if student.suspended_until and student.suspended_until > now:
             raise UserError(f"Your booking privileges are paused until {fmt(student.suspended_until)}"
                             f"{(' (' + student.suspension_reason + ')') if student.suspension_reason else ''}. "
@@ -298,7 +308,7 @@ def slots_for(db: Session, student: Student, approval_number: str, machine_id: i
     elif not out["slots"]:
         when = "today" if d == clock.to_local(now).date() else d.strftime("%A %b %d")
         out["error"], out["code"] = (f"There are no open times left {when}. Try another date.", "none_left")
-    out["needs_contact"] = bool(out["slots"]) and not (student.phone and student.phone_ack_at)
+    out["needs_contact"] = bool(out["slots"]) and cfg.require_phone_to_reserve and not student.shown_contact
     if out["slots"] and not out["needs_waiver"]:
         out["needs_waiver"] = not has_waiver(db, student.id, cfg.waiver_version)
     return out
