@@ -2,17 +2,23 @@
 {% from "_macros.html" import errors %}
 {% block content %}
 <h1>Time-change request</h1>
+{{ errors(errs) }}
 {% set t = r.target_reservation %}
 <div class="card">
-{% if as_target %}<p><strong>{{ r.requester.public_name }}</strong> would like to use the {{ t.machine.name }} during your booked time and asked if you could move.</p>
-<dl class="kv"><dt>Your time now</dt><dd>{{ t.start_at|local }} – {{ t.end_at|localtime }}</dd><dt>Would move to</dt><dd>{{ r.proposed_start|local }} – {{ r.proposed_end|localtime }}</dd></dl>
+{% if as_target %}<p><strong>{{ r.requester.public_name }}</strong> asks if they can have the <strong>{{ t.machine.name }}</strong> from <strong>{{ r.wanted_start|local }} – {{ r.wanted_end|localtime }}</strong>. That overlaps your booking.</p>
+<dl class="kv"><dt>Your booking</dt><dd>{{ t.start_at|local }} – {{ t.end_at|localtime }}</dd><dt>They want</dt><dd>{{ r.wanted_start|local }} – {{ r.wanted_end|localtime }}</dd></dl>
 {% if r.note %}<p>Their note: “{{ r.note }}”</p>{% endif %}
-{% else %}<p>You asked {{ t.student.public_name }} about {{ t.machine.name }}.</p>{% endif %}
-<p>Status: <strong>{{ r.status|title }}</strong></p></div>
+{% else %}<p>You asked {{ t.student.public_name }} for the {{ t.machine.name }} {{ r.wanted_start|local }} – {{ r.wanted_end|localtime }}.</p>{% endif %}
+<p>Status: <strong>{{ r.status|title }}</strong>{% if r.status == 'accepted' and r.new_start %} · they moved to {{ r.new_start|local }} – {{ r.new_end|localtime }}{% endif %}</p></div>
 {% if open and as_target %}
-<p>It's completely optional. A "no" is never shown to anyone, and you don't have to give a reason.</p>
-<form class="inline" method="post" action="/requests/{{ r.id }}/accept"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Yes, I can move</button></form>
-<form class="inline" method="post" action="/requests/{{ r.id }}/decline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="secondary" type="submit">No thanks</button></form>
+<p>It's completely optional, and a "no" is never shown to anyone. If you can help, choose the time that suits <strong>you</strong>:</p>
+{% if options %}
+<form method="post" action="/requests/{{ r.id }}/accept" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<fieldset class="slots-set"><legend>Where would you like to go instead?</legend>
+<div class="slots">{% for o in options %}<label><input type="radio" name="choice" value="{{ enc(o.start, o.end) }}" required><span>{{ o.start|local('%a %b %d') }}<br>{{ o.start|localtime }}–{{ o.end|localtime }}<br><small>{% if o.kind == 'trim' %}keep just this part{% else %}same length, moved{% endif %}</small></span></label>{% endfor %}</div></fieldset>
+<button class="block" type="submit">Yes: move me to the selected time</button></form>
+{% else %}<div class="notice">There's no free time that fits for you right now, so you can't move. You can say no, or ask a supervisor for help.</div>{% endif %}
+<form method="post" action="/requests/{{ r.id }}/decline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="secondary" type="submit">No thanks</button></form>
 {% elif open %}<form method="post" action="/requests/{{ r.id }}/cancel"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="secondary" type="submit">Cancel my request</button></form>{% endif %}
 <p><a href="/my">← My shop</a></p>
 {% endblock %}

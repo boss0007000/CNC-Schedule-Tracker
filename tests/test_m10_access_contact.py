@@ -361,180 +361,240 @@ def test_tv_shows_contact_of_current_user_and_next_booking_and_can_hide_it(clien
     assert m["user_contact"] is None and m["next_contact"] is None and m["user"] == "Alex R."
 
 
-# ============================================================ time-change requests
+# ============================================================ time-change requests (ask for a time, target picks a new one)
 @pytest.fixture
 def pair(db, w):
-    """Jordan holds MM1 at 15:00 today; Alex would like it."""
-    target = book(db, w.jordan, w.a_jordan, MM1, at(0, 15))
+    """Jordan (student A) holds the Mini Mill 1 from 2 PM to 5 PM today; Alex (student B) would like 1-3 PM."""
+    target = book(db, w.jordan, w.a_jordan, MM1, at(0, 14), 3)
     db.commit()
     return target
 
 
-def ask(db, w, target, hour=16, note="Thanks!"):
-    return changes.create(db, w.alex, target.id, at(0, hour), note)
+def ask(db, w, target, start=13, end=15, note="Thanks!"):
+    return changes.create(db, w.alex, target.id, at(0, start), at(0, end), note)
 
 
-def test_candidate_windows_are_free_legal_and_dont_overlap_the_old_time(db, w, pair):
-    wins = changes.candidate_windows(db, pair, clock.now())
-    assert wins and all(e - s == timedelta(hours=1) for s, e in wins)
-    assert all(not (s < pair.end_at and e > pair.start_at) for s, e in wins)
-    assert all(s > clock.now() for s, _ in wins)
+def win(db, target, ws=13, we=15):
+    return [(o["start"], o["end"], o["kind"]) for o in changes.target_options(db, target, (at(0, ws), at(0, we)), clock.now())]
 
 
-def test_request_email_is_polite_and_leaks_nothing(db, w, pair):
+def test_wanted_options_overlap_the_target_and_are_otherwise_free(db, w, pair):
+    book(db, w.sam, w.a_sam, MM1, at(0, 11), 1) if False else None
+    opts = changes.wanted_options(db, w.alex, pair, clock.now())
+    assert (at(0, 13), at(0, 15)) in opts and (at(0, 14), at(0, 16)) in opts and (at(0, 16), at(0, 18)) in opts
+    assert all(s < pair.end_at and e > pair.start_at for s, e in opts)  # every option overlaps their booking
+    assert all(s > clock.now() for s, _ in opts)
+    assert (at(0, 17), at(0, 18)) not in opts  # doesn't touch their booking
+
+
+def test_wanted_options_exclude_times_blocked_by_other_bookings(db, w, pair):
+    other = new_student_with_booking(db, w, MM1, at(0, 12), 1)  # someone else holds 12-1 PM
+    opts = changes.wanted_options(db, w.alex, pair, clock.now())
+    assert (at(0, 13), at(0, 15)) in opts and (at(0, 12), at(0, 15)) not in opts and (at(0, 12), at(0, 14)) not in opts
+    assert other.status == "confirmed"
+
+
+def new_student_with_booking(db, w, name, start, hours):
+    riley = student(db, "riley")
+    a = make_approval(db, riley, [name])
+    certify(db, riley, group="CNC Mills")
+    return book(db, riley, a, name, start, hours)
+
+
+def test_request_email_is_polite_names_the_wanted_time_and_leaks_nothing(db, w, pair):
     emailer.SENT.clear()
     req = ask(db, w, pair)
     emailer.flush_outbox(db)
-    mail = next(m for m in emailer.SENT if "asked about your" in m["subject"])
+    mail = next(m for m in emailer.SENT if "would like the" in m["subject"])
     t = mail["text"]
-    assert mail["to"] == w.jordan.email
-    assert "Alex R." in t and "optional" in t and f"/requests/{req.id}" in t and "Thanks!" in t
+    assert mail["to"] == w.jordan.email and "Alex R." in t and "1:00 PM" in t and "3:00 PM" in t and "overlaps your booking" in t
+    assert "optional" in t and "pick a new time that suits YOU" in t and f"/requests/{req.id}" in t and "Thanks!" in t
     for leak in ("5305550101", w.alex.email, "super approved", "approved list"):
         assert leak not in t
+    assert req.wanted_start == at(0, 13) and req.wanted_end == at(0, 15) and req.status == "pending"
 
 
-def test_cannot_ask_for_own_muted_or_too_soon_slots(db, w, pair):
+def test_cannot_ask_for_own_muted_or_too_soon_bookings(db, w, pair):
     own = book(db, w.alex, w.a_alex, MM2, at(0, 12))
     with pytest.raises(UserError) as e:
-        changes.create(db, w.alex, own.id, at(0, 14), "")
+        changes.create(db, w.alex, own.id, at(0, 12), at(0, 13), "")
     assert e.value.code == "own"
     w.jordan.allow_requests = False
     with pytest.raises(UserError) as e:
         ask(db, w, pair)
     assert e.value.code == "muted"
     w.jordan.allow_requests = True
-    clock.freeze(at(0, 13, 30))  # booking is 90 minutes away: too close to ask
+    clock.freeze(at(0, 12, 30))  # their booking is 90 minutes away: too close to ask
     with pytest.raises(UserError) as e:
         ask(db, w, pair)
     assert e.value.code == "too_late"
 
 
-def test_bad_proposed_window_rejected(db, w, pair):
+def test_wanted_time_must_overlap_and_be_free_and_legal(db, w, pair):
     with pytest.raises(UserError) as e:
-        changes.create(db, w.alex, pair.id, at(0, 15), "")  # overlaps the time being asked for
+        ask(db, w, pair, 18, 19)  # nowhere near their booking
     assert e.value.code == "bad_window"
-
-
-def test_requester_must_be_able_to_book_that_machine(db, w, pair):
-    riley = student(db, "riley")  # on the approved list, but no approval for MM1
+    new_student_with_booking(db, w, MM1, at(0, 12), 1)
     with pytest.raises(UserError) as e:
-        changes.create(db, riley, pair.id, at(0, 16), "")
-    assert e.value.code == "approval_not_found"
+        ask(db, w, pair, 12, 15)  # 12-1 belongs to somebody else
+    assert e.value.code == "bad_window"
+    from tests.factories import new_student
+    stranger = new_student(db, "nobody@csuchico.edu")  # on no list and with no approval
+    with pytest.raises(UserError) as e:
+        changes.create(db, stranger, pair.id, at(0, 13), at(0, 15), "")
+    assert e.value.code in ("bad_window", "approval_not_found")
 
 
 def test_limits_against_pestering(db, w, pair):
     shop_settings.set_value(db, "max_open_change_requests", 2)
-    r1 = ask(db, w, pair, 16)
-    with pytest.raises(UserError) as e:  # one open ask per slot
-        changes.create(db, w.alex, pair.id, at(0, 17), "")
+    ask(db, w, pair)
+    with pytest.raises(UserError) as e:  # one open ask per booking
+        ask(db, w, pair, 14, 16)
     assert e.value.code == "dup"
-    others = [book(db, w.sam, w.a_sam, MM2, at(1, h)) for h in (9, 11)]
-    changes.create(db, w.alex, others[0].id, at(1, 14), "")
+    t2 = book(db, w.sam, w.a_sam, MM2, at(1, 9), 3)
+    t3 = book(db, w.sam, w.a_sam, MM1, at(1, 14), 2)
+    changes.create(db, w.alex, t2.id, at(1, 8), at(1, 10), "")
     with pytest.raises(UserError) as e:
-        changes.create(db, w.alex, others[1].id, at(1, 15), "")
+        changes.create(db, w.alex, t3.id, at(1, 13), at(1, 15), "")
     assert e.value.code == "limit"
 
 
-def test_accept_moves_their_slot_and_holds_the_freed_time_for_the_asker(db, w, pair):
-    req = ask(db, w, pair, 16)
+def test_target_options_offer_trim_and_moves_including_the_example_3_to_6(db, w, pair):
+    opts = win(db, pair)
+    assert (at(0, 15), at(0, 17), "trim") in opts  # keep just the part that doesn't clash
+    assert (at(0, 15), at(0, 18), "move") in opts  # "3-6 instead"
+    assert all(not (s < at(0, 15) and e > at(0, 13)) for s, e, _ in opts)  # nothing overlaps what B wants
+    assert all(e - s <= timedelta(hours=3) for s, e, _ in opts)  # never longer than their current time
+    new_student_with_booking(db, w, MM1, at(0, 17), 1)  # 5-6 PM taken: 3-6 is no longer possible
+    assert (at(0, 15), at(0, 18), "move") not in win(db, pair)
+
+
+def test_accept_moves_the_target_books_the_asker_and_alerts_everyone(db, w, pair):
+    req = ask(db, w, pair)
     emailer.SENT.clear()
-    wl = changes.accept(db, req, w.jordan)
-    db.flush()
-    assert pair.start_at == at(0, 16) and pair.end_at == at(0, 17) and req.status == "accepted"
-    assert wl.student_id == w.alex.id and wl.status == "offered" and wl.start_at == at(0, 15)
+    new_res = changes.accept(db, req, w.jordan, at(0, 15), at(0, 18))
+    assert pair.start_at == at(0, 15) and pair.end_at == at(0, 18) and pair.status == "confirmed"
+    assert new_res.student_id == w.alex.id and new_res.start_at == at(0, 13) and new_res.end_at == at(0, 15)
+    assert new_res.status == "confirmed" and new_res.machine_id == pair.machine_id
+    assert req.status == "accepted" and req.new_start == at(0, 15) and req.new_end == at(0, 18)
     emailer.flush_outbox(db)
-    to = {m["to"]: m for m in emailer.SENT}
-    assert w.alex.email in to and wl.claim_token in to[w.alex.email]["text"]
-    assert w.jordan.email in to and "moved" in to[w.jordan.email]["subject"]
-    # nobody else can grab the freed hour while the offer is open
-    assert err(db, w.sam, w.a_sam, MM1, at(0, 15)).code == "overlap"
-    res = rs.claim(db, wl.claim_token, w.alex)
-    assert res.start_at == at(0, 15) and res.student_id == w.alex.id
+    by_to = {}
+    for m in emailer.SENT:
+        by_to.setdefault(m["to"], []).append(m)
+    assert any("Confirmed" in m["subject"] and new_res.ref in m["text"] for m in by_to[w.alex.email])
+    assert any("moved to" in m["subject"] and pair.ref in m["text"] for m in by_to[w.jordan.email])
+    staff = by_to["sam@example.edu"]  # supervisor on duty
+    assert any("Schedule swap" in m["subject"] and new_res.ref in m["text"] for m in staff)
+    row = db.scalar(select(AuditLog).where(AuditLog.action == "change_request.accept"))
+    assert row.actor == f"student:{w.jordan.email}" and row.after["requester_ref"] == new_res.ref
+
+
+def test_accept_can_keep_just_the_part_that_does_not_clash(db, w, pair):
+    req = ask(db, w, pair)
+    changes.accept(db, req, w.jordan, at(0, 15), at(0, 17))
+    assert pair.start_at == at(0, 15) and pair.end_at == at(0, 17) and pair.hours == 2
+
+
+def test_accept_with_a_time_not_offered_changes_nothing(db, w, pair):
+    req = ask(db, w, pair)
+    with pytest.raises(UserError) as e:
+        changes.accept(db, req, w.jordan, at(0, 14), at(0, 17))  # clashes with what the asker wants
+    assert e.value.code == "bad_choice"
+    assert pair.start_at == at(0, 14) and req.status == "pending"
+    assert db.scalar(select(Reservation).where(Reservation.student_id == w.alex.id)) is None
+
+
+def test_accept_is_all_or_nothing_if_the_asker_stops_being_eligible(db, w, pair):
+    req = ask(db, w, pair)
+    w.a_alex.status = "revoked"  # the asker's approval is revoked before the answer arrives
+    db.flush()
+    with pytest.raises(UserError):
+        changes.accept(db, req, w.jordan, at(0, 15), at(0, 18))
+    db.refresh(pair)
+    assert pair.start_at == at(0, 14) and pair.end_at == at(0, 17) and req.status == "pending"
+    assert db.scalar(select(Reservation).where(Reservation.student_id == w.alex.id)) is None
 
 
 def test_decline_is_neutral_cooled_down_and_changes_nothing(db, w, pair):
     shop_settings.set_value(db, "change_request_cooldown_hours", 1)
-    req = ask(db, w, pair, 16)
+    req = ask(db, w, pair)
     emailer.SENT.clear()
     changes.decline(db, req, w.jordan)
     emailer.flush_outbox(db)
-    assert pair.start_at == at(0, 15) and req.status == "declined"
+    assert pair.start_at == at(0, 14) and req.status == "declined"
     t = emailer.SENT[-1]["text"]
     assert emailer.SENT[-1]["to"] == w.alex.email and "weren't able" in t and "Jordan" not in t
     with pytest.raises(UserError) as e:
-        ask(db, w, pair, 17)
+        ask(db, w, pair, 14, 16)
     assert e.value.code == "cooldown"
     clock.advance(hours=2)  # cooldown over: asking again is fine
-    changes.create(db, w.alex, pair.id, at(0, 17), "")
-
-
-def test_accept_rechecks_that_the_new_time_is_still_free(db, w, pair):
-    req = ask(db, w, pair, 16)
-    book(db, w.sam, w.a_sam, MM1, at(0, 16))  # someone takes the proposed time meanwhile
-    with pytest.raises(UserError) as e:
-        changes.accept(db, req, w.jordan)
-    assert e.value.code == "overlap"
-    assert pair.start_at == at(0, 15) and req.status == "pending"
+    ask(db, w, pair, 14, 16)
 
 
 def test_only_the_asked_student_can_answer_and_only_while_open(db, w, pair):
-    req = ask(db, w, pair, 16)
-    for fn in (changes.accept, changes.decline):
+    req = ask(db, w, pair)
+    for fn, args in ((changes.accept, (at(0, 15), at(0, 18))), (changes.decline, ())):
         with pytest.raises(UserError) as e:
-            fn(db, req, w.sam)
+            fn(db, req, w.sam, *args)
         assert e.value.code == "not_yours"
     with pytest.raises(UserError):
         changes.cancel(db, req, w.jordan)  # only the asker can cancel
     changes.cancel(db, req, w.alex)
     with pytest.raises(UserError) as e:
-        changes.accept(db, req, w.jordan)
+        changes.accept(db, req, w.jordan, at(0, 15), at(0, 18))
     assert e.value.code == "closed"
 
 
 def test_requests_expire(db, w, pair):
-    req = ask(db, w, pair, 16)
+    req = ask(db, w, pair)
     assert req.expires_at <= pair.start_at - timedelta(hours=1)
     clock.freeze(req.expires_at + timedelta(minutes=1))
     from app.services import lifecycle
     assert lifecycle.sweep(db)["requests_expired"] == 1 and req.status == "expired"
     with pytest.raises(UserError):
-        changes.accept(db, req, w.jordan)
+        changes.accept(db, req, w.jordan, at(0, 15), at(0, 18))
 
 
-def test_request_flow_over_http(client, db, w, pair):
+def test_request_flow_over_http_ask_then_pick_a_new_time(client, db, w, pair):
     from app import security
     tok = verify_student(client, w.alex.email, "Alex Rivera")
     page = client.get(f"/requests/new?res={pair.id}")
-    assert page.status_code == 200 and "Ask about a time change" in page.text and 'name="start"' in page.text
-    start = at(0, 16).isoformat()
+    assert page.status_code == 200 and "Ask for a different time" in page.text and 'name="window"' in page.text
+    wanted = f"{at(0, 13).isoformat()}|{at(0, 15).isoformat()}"
     r = client.post("/requests/new", data={"csrf_token": tok, "form_token": security.new_form_token(), "res": str(pair.id),
-                                           "start": start, "note": "please?"}, follow_redirects=False)
+                                           "window": wanted, "note": "please?"}, follow_redirects=False)
     assert r.status_code == 303
     req = db.scalar(select(TimeChangeRequest))
     with TestClient(client.app, base_url="http://testserver") as jc:
         jt = verify_student(jc, w.jordan.email, "Jordan Lee", "senior")
-        assert "asked if you could move" in jc.get("/my").text
+        assert "wants the" in jc.get("/my").text
         view = jc.get(f"/requests/{req.id}")
-        assert "Alex R." in view.text and "No thanks" in view.text
-        assert client.get(f"/requests/{req.id}").status_code == 200  # the asker may view too
-        r2 = jc.post(f"/requests/{req.id}/accept", data={"csrf_token": jt}, follow_redirects=False)
-        assert r2.status_code == 303
+        assert "Alex R." in view.text and 'name="choice"' in view.text and "No thanks" in view.text and "move me to the selected time" in view.text
+        bad = jc.post(f"/requests/{req.id}/accept", data={"csrf_token": jt, "choice": f"{at(0, 14).isoformat()}|{at(0, 17).isoformat()}"})
+        assert bad.status_code == 400 and "isn&#39;t available" in bad.text.replace("’", "&#39;") or bad.status_code == 400
+        choice = f"{at(0, 15).isoformat()}|{at(0, 18).isoformat()}"
+        ok = jc.post(f"/requests/{req.id}/accept", data={"csrf_token": jt, "choice": choice}, follow_redirects=False)
+        assert ok.status_code == 303
     db.expire_all()
     assert db.get(TimeChangeRequest, req.id).status == "accepted"
-    assert db.get(Reservation, pair.id).start_at == at(0, 16)
+    assert db.get(Reservation, pair.id).start_at == at(0, 15)
+    mine = db.scalar(select(Reservation).where(Reservation.student_id == w.alex.id))
+    assert mine and mine.start_at == at(0, 13) and mine.end_at == at(0, 15)
+    assert "You asked" in client.get(f"/requests/{req.id}").text
     other = TestClient(client.app, base_url="http://testserver")
     with other:
         verify_student(other, w.sam.email, "Sam Patel", "sophomore")
         assert other.get(f"/requests/{req.id}").status_code == 404
 
 
-def test_staff_can_see_requests(db, w, pair):
-    ask(db, w, pair, 16)
+def test_staff_can_see_requests_with_the_wanted_and_new_time(db, w, pair):
+    req = ask(db, w, pair)
+    changes.accept(db, req, w.jordan, at(0, 15), at(0, 18))
     db.commit()
     sup = login("sam")
     try:
         page = sup.get("/admin/requests").text
-        assert "Alex Rivera" in page and "Jordan Lee" in page and "pending" in page
+        assert "Alex Rivera" in page and "Jordan Lee" in page and "accepted" in page and "1:00 PM" in page
     finally:
         sup.__exit__(None, None, None)
 
@@ -542,6 +602,7 @@ def test_staff_can_see_requests(db, w, pair):
 def test_no_priority_or_rank_fields_exist():
     cols = {c.name for c in TimeChangeRequest.__table__.columns}
     assert not cols & {"priority", "urgency", "critical", "rank", "score", "level"}
+    assert {"wanted_start", "wanted_end", "new_start", "new_end"} <= cols
     assert not {c.name for c in Student.__table__.columns} & {"score", "rank", "points", "karma"}
 
 

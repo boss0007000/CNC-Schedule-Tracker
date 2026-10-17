@@ -77,6 +77,6 @@ Data model: [docs/data-model.md](docs/data-model.md). Security review: [docs/sec
 * **Holds:** "setup" or "tools only" left in a machine blocks others for a capped number of open days (3 / 1), with daily reminders and a closing-time prompt.
 * **Schedules are public** (no login): see docs/security-review.md. The TV shows the machines plus a separate "This week" availability block (no names).
 * **Contact details** are optional: each student picks phone, email or nothing to show on the schedule page and TV (see docs/security-review.md). Staff can edit a booking's time within the student's approval limits (Reservations > Edit time, Sessions > Adjust end time).
-* **Time-change requests** between students are optional asks, one tap to accept or decline, no priority or ranking anywhere.
+* **Time-change requests** between students: a student asks for the time they need; the other says no (one tap) or yes and picks a new time; the swap is applied atomically and the asker, the mover and the supervisor on duty are emailed. No priority or ranking anywhere.
 * Not built (designed for): SSO, ID-card scanning, hardware access control, tool inventory, multi-location UI (`location_id` columns exist).
 * **Data policy:** confirm FERPA/retention/hosting with the department and campus IT before using real student data.

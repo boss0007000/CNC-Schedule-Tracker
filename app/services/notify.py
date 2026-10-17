@@ -150,26 +150,41 @@ def emergency(db: Session, to: str, message: str) -> None:
 
 
 # --- peer time-change requests ----------------------------------------------------------------
+def _win(a, b) -> str:
+    return f"{_fmt(a)} – {clock.to_local(b).strftime('%I:%M %p').lstrip('0')}"
+
+
 def change_requested(db: Session, req) -> None:
     r = req.target_reservation
     note = f"\nTheir note: “{req.note}”\n" if req.note else ""
-    emailer.queue(db, req.target_student.email, f"{req.requester.public_name} asked about your {r.machine.name} time",
-                  f"Hi {req.target_student.first_name},\n\n{req.requester.public_name} would like to use the {r.machine.name} "
-                  f"during your booked time ({_fmt(r.start_at)} – {_fmt(r.end_at)}) and asked if you could move to "
-                  f"{_fmt(req.proposed_start)} – {_fmt(req.proposed_end)} instead.\n{note}\n"
-                  f"This is completely optional. Say yes or no with one tap — no reason needed, and a no is never shown to anyone:\n"
+    emailer.queue(db, req.target_student.email, f"{req.requester.public_name} would like the {r.machine.name} during your time",
+                  f"Hi {req.target_student.first_name},\n\n{req.requester.public_name} asks if they can have the {r.machine.name} "
+                  f"from {_win(req.wanted_start, req.wanted_end)}. That overlaps your booking "
+                  f"({_win(r.start_at, r.end_at)}).\n{note}\n"
+                  f"It is completely optional. If you're happy to help you'll pick a new time that suits YOU (for example a later "
+                  f"slot, or keeping just the part that doesn't clash). A \"no\" is one tap, needs no reason, and is never shown to anyone:\n"
                   f"{get_config().base_url}/requests/{req.id}\n\nIf you can't agree, a shop supervisor can help.\n\n— {_shop(db)}")
 
 
-def change_accepted(db: Session, req, token: str, claim_hours: float) -> None:
-    r = req.target_reservation
-    emailer.queue(db, req.requester.email, f"Good news: a {r.machine.name} time is yours to claim",
-                  f"Hi {req.requester.first_name},\n\nThey agreed to move, so the {r.machine.name} time you asked about is free for you. "
-                  f"Claim it here within {claim_hours:g} hours or it is released:\n"
-                  f"{get_config().base_url}/waitlist/claim/{token}\n\nThank them if you see them!\n\n— {_shop(db)}")
-    emailer.queue(db, req.target_student.email, f"Your {r.machine.name} time was moved",
-                  f"Hi {req.target_student.first_name},\n\nThanks for being flexible. Your reservation {r.ref} is now "
-                  f"{_fmt(r.start_at)} – {_fmt(r.end_at)} on the {r.machine.name}.\n\n— {_shop(db)}")
+def change_accepted(db: Session, req, new_res, old) -> None:
+    """Alert every relevant party: the asker, the student who moved, and the supervisor on duty."""
+    t = req.target_reservation
+    m = t.machine.name
+    emailer.queue(db, req.requester.email, f"Confirmed: you have the {m} {_win(new_res.start_at, new_res.end_at)}",
+                  f"Hi {req.requester.first_name},\n\n{req.target_student.public_name} agreed. Your booking is confirmed:\n"
+                  f"Reference: {new_res.ref}\nMachine: {m}\nTime: {_win(new_res.start_at, new_res.end_at)}\n\n"
+                  f"Please thank them if you see them! Need to cancel? {cancel_link(new_res)}\n\n— {_shop(db)}")
+    emailer.queue(db, req.target_student.email, f"Your {m} time was moved to {_win(t.start_at, t.end_at)}",
+                  f"Hi {req.target_student.first_name},\n\nThanks for being flexible. Your reservation {t.ref} on the {m} used to be "
+                  f"{_win(old[0], old[1])} and is now {_win(t.start_at, t.end_at)}.\n\nManage it: {cancel_link(t)}\n\n— {_shop(db)}")
+    from app.services import shop
+    sup = shop.supervisor_on_duty(db, clock.now())
+    to = [sup.email] if sup and sup.email else staff_recipients(db)
+    for addr in to:
+        emailer.queue(db, addr, f"Schedule swap on {m}: {req.requester.public_name} / {req.target_student.public_name}",
+                      f"{req.target_student.full_name} agreed to move from {_win(old[0], old[1])} to {_win(t.start_at, t.end_at)} "
+                      f"so {req.requester.full_name} can use the {m} {_win(new_res.start_at, new_res.end_at)} (ref {new_res.ref}). "
+                      f"Nothing is needed from you; this is for your information.")
 
 
 def change_declined(db: Session, req) -> None:

@@ -13,7 +13,7 @@
 <label for="hm">Leaving something in a machine you just used?</label>
 <select id="hm" name="machine_id">{% for m in recent_machines %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select>
 <button class="small" name="kind" value="tools" type="submit">Only my tools: do not touch</button> <button class="small secondary" name="kind" value="setup" type="submit">My setup: do not touch</button></form>{% endif %}{% endif %}
-{% if incoming %}<h2>Someone asked about your time</h2>{% for q in incoming %}<div class="card"><strong>{{ q.requester.public_name }}</strong> asked if you could move your {{ q.target_reservation.machine.name }} time. <a class="btn small" href="/requests/{{ q.id }}">Take a look</a> <span class="muted">(optional, say no any time)</span></div>{% endfor %}{% endif %}
+{% if incoming %}<h2>Someone asked about your time</h2>{% for q in incoming %}<div class="card"><strong>{{ q.requester.public_name }}</strong> wants the {{ q.target_reservation.machine.name }} {{ q.wanted_start|local }}–{{ q.wanted_end|localtime }} (overlapping your booking). <a class="btn small" href="/requests/{{ q.id }}">Take a look</a> <span class="muted">(optional, say no any time)</span></div>{% endfor %}{% endif %}
 {% if outgoing %}<h2>Your requests</h2>{% for q in outgoing %}<div class="card">Waiting for {{ q.target_student.public_name }} about {{ q.target_reservation.machine.name }}. <a class="btn small secondary" href="/requests/{{ q.id }}">View</a></div>{% endfor %}{% endif %}
 <h2>Contact settings</h2>
 <form method="post" action="/my/contact" class="card">

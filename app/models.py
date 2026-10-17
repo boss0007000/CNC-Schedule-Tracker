@@ -586,8 +586,14 @@ class TimeChangeRequest(Base):
     target_reservation_id: Mapped[int] = mapped_column(ForeignKey("reservations.id"), index=True)
     target_student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
     requester_approval_id: Mapped[int] = mapped_column(ForeignKey("approvals.id"))
-    proposed_start: Mapped[datetime]  # where the target's reservation would move to
-    proposed_end: Mapped[datetime]
+    # what the REQUESTER wants (may overlap the target's booking, e.g. wants 1-3 while the target has 2-5)
+    wanted_start: Mapped[datetime | None]
+    wanted_end: Mapped[datetime | None]
+    # where the TARGET chose to move when accepting (e.g. 3-6, or just the part that doesn't clash)
+    new_start: Mapped[datetime | None]
+    new_end: Mapped[datetime | None]
+    proposed_start: Mapped[datetime | None]  # legacy (earlier version: requester suggested the target's new time)
+    proposed_end: Mapped[datetime | None]
     note: Mapped[str | None] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)  # pending|accepted|declined|expired|cancelled
     created_at: Mapped[datetime] = mapped_column(default=_now)

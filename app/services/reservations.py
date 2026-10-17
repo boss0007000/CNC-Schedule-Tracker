@@ -317,12 +317,13 @@ def slots_for(db: Session, student: Student, approval_number: str, machine_id: i
 # ----------------------------------------------------------------------------- writes
 def create(db: Session, student: Student, approval_number: str | None, machine_id: int, start: datetime,
            end: datetime, *, waiver_accepted: bool = False, ip: str | None = None, now: datetime | None = None,
-           actor: str | None = None, override: bool = False, allow_started: bool = False) -> Reservation:
+           actor: str | None = None, override: bool = False, allow_started: bool = False,
+           contact_accepted: bool = False) -> Reservation:
     now = now or clock.now()
     # serialize bookings per machine (row lock on Postgres; SQLite serializes writers anyway)
     db.execute(select(Machine.id).where(Machine.id == machine_id).with_for_update())
     ctx = validate(db, student, approval_number, machine_id, start, end, now=now, waiver_accepted=waiver_accepted,
-                   override=override, allow_started=allow_started)
+                   override=override, allow_started=allow_started, contact_accepted=contact_accepted)
     if waiver_accepted and not override:
         sign_waiver(db, student, ip)
     r = Reservation(ref=numbers.new_reservation_ref(db), student_id=student.id,

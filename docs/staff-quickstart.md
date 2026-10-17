@@ -45,7 +45,7 @@ Giving a phone number is **optional**. Each student chooses what other students 
 * A student already on the machine keeps their start time; only the end changes.
 
 ## Students changing times with each other
-Students can politely ask each other to move a slot (Access/Requests page shows them). Nobody can order anyone, a "no" is never shown to others, and there is no priority setting. If two students can't agree you decide, using Reservations.
+From a machine's schedule page, a student can **ask for the time they need** (for example 1-3 PM when someone else has 2-5 PM). The other student gets an email and either says **no** (one tap, no reason, never shown to anyone) or says **yes and picks where to go instead**: a later slot such as 3-6 PM, or just the part of their time that doesn't clash. On yes, everything happens in one step: their booking moves, the asker's booking is created, and **the asker, the student who moved and the supervisor on duty are all emailed**. If anything stopped being valid, nothing changes. Everything respects each student's approval and access limits. There is no priority or urgency setting, so nobody can pull rank; if two students can't agree, you decide using Reservations. The Requests page shows every request. (Email only: texts would need a paid service.)
 
 ## Emergency
 Dashboard > **Emergency close** → type CLOSE. Every machine shows *Under Maintenance*, the TV goes full-screen red, active users get an email.
