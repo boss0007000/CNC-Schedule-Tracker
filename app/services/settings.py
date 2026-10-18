@@ -12,7 +12,7 @@ WAIVER_TEXT = (
 )
 
 DEFAULTS: dict[str, object] = {
-    "shop_name": "Student Machine Shop",
+    "shop_name": "GENE HAAS ADVANCED MANUFACTURING LAB",
     "allowed_email_domain": None,  # None -> falls back to ALLOWED_EMAIL_DOMAIN env
     "collect_student_id": False,
     "slot_minutes": 60,

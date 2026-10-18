@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import clock, security
 from app.errors import UserError
-from app.models import ROLES, StaffUser
+from app.models import StaffUser
 from app.services import audit
 
 MAX_FAILURES = 5
@@ -15,28 +15,107 @@ SESSION_MAX_AGE = 8 * 3600
 COOKIE = "staff_session"
 
 
+# --- permissions -------------------------------------------------------------------------------
+# Every capability is a named permission; roles are presets of permissions; a person can hold several roles.
+PERM_DESCRIPTIONS = {
+    "view": "See every admin page (read-only)",
+    "checkins.decide": "Approve or deny student check-ins",
+    "sessions.force": "Force check-in/out, adjust or close sessions, review auto-closed sessions",
+    "incidents.write": "Record incidents and update damage reports",
+    "machines.status": "Override machine status, log maintenance, clear inspections, place/release holds",
+    "emergency": "Emergency close and reopen the shop",
+    "projects.review": "Approve, reject or send back projects/parts; revoke approvals",
+    "certs.manage": "Grant and revoke certifications",
+    "access.approved": "Add/remove students on the Approved list",
+    "access.super": "Add/remove students on the Super approved list",
+    "students.suspend": "Suspend and unsuspend booking",
+    "reservations.manage": "Create, edit, cancel, release reservations and edit booked times",
+    "admin": "Users, settings, machines, access grid, backups, audit log, sensitive exports",
+}
+_OPS = {"view", "checkins.decide", "sessions.force", "incidents.write", "machines.status", "emergency", "projects.review",
+        "certs.manage", "access.approved", "students.suspend", "reservations.manage"}
+ROLE_INFO: dict[str, tuple[str, str, set[str]]] = {
+    "monitor": ("Monitor", "Read-only: can look at everything, change nothing.", {"view"}),
+    "maintenance": ("Maintenance", "Keeps machines running: maintenance log, repairs, inspection clearance, damage reports.",
+                    {"view", "machines.status", "incidents.write"}),
+    "scheduler": ("Scheduler", "Runs the booking calendar: create, edit and cancel reservations.", {"view", "reservations.manage"}),
+    "trainer": ("Trainer", "Signs people off: certifications and the Approved student list.",
+                {"view", "certs.manage", "access.approved"}),
+    "part_reviewer": ("Part reviewer", "Reviews projects and parts: approve, reject, request changes, revoke approvals.",
+                      {"view", "projects.review"}),
+    "floor_supervisor": ("Floor supervisor (safety)", "On the shop floor making sure people work safely: approves check-ins, "
+                         "forces check-in/out, incidents, machine status and holds, emergency close, suspensions.",
+                         {"view", "checkins.decide", "sessions.force", "incidents.write", "machines.status", "emergency",
+                          "students.suspend"}),
+    "supervisor": ("Lead supervisor", "Everything operational (all of the above), but not users, settings or the audit log.",
+                   set(_OPS)),
+    "admin": ("Admin", "Everything, including users, settings, machines, the access grid, backups and the audit log.",
+              set(_OPS) | {"access.super", "admin"}),
+}
+ROLE_ORDER = ["monitor", "maintenance", "scheduler", "trainer", "part_reviewer", "floor_supervisor", "supervisor", "admin"]
+
+
 def role_rank(role: str) -> int:
-    return ROLES.index(role)
+    return ROLE_ORDER.index(role) if role in ROLE_ORDER else 0
 
 
-def has_role(user: StaffUser, minimum: str) -> bool:
+def roles_of(user: StaffUser) -> set[str]:
+    return {r for r in (list(user.roles or []) + [user.role]) if r in ROLE_INFO}
+
+
+def perms_of(user: StaffUser) -> frozenset[str]:
+    out: set[str] = {"view"}
+    for r in roles_of(user):
+        out |= ROLE_INFO[r][2]
+    return frozenset(out)
+
+
+def can(user: StaffUser, perm: str) -> bool:
+    return perm in perms_of(user)
+
+
+def primary_role(roles: set[str] | list[str]) -> str:
+    rs = [r for r in roles if r in ROLE_INFO]
+    return max(rs, key=role_rank) if rs else "monitor"
+
+
+def has_role(user: StaffUser, minimum: str) -> bool:  # legacy rank check
     return role_rank(user.role) >= role_rank(minimum)
 
 
+def normalize_roles(roles) -> list[str]:
+    clean = [r for r in ROLE_ORDER if r in set(roles or [])]
+    if not clean:
+        raise UserError("Choose at least one role.")
+    return clean
+
+
+def set_roles(db: Session, actor: str, user: StaffUser, roles) -> None:
+    clean = normalize_roles(roles)
+    before = sorted(roles_of(user))
+    if "admin" in before and "admin" not in clean:
+        other_admins = db.scalar(select(func.count()).select_from(StaffUser).where(
+            StaffUser.active.is_(True), StaffUser.id != user.id, StaffUser.role == "admin")) or 0
+        if not other_admins:
+            raise UserError("There must always be at least one active admin. Make someone else an admin first.")
+    user.roles, user.role = clean, primary_role(clean)
+    user.session_epoch += 1  # sign them out so the new permissions apply immediately
+    audit.record(db, actor, "staff.roles", "staff_user", user.id, {"roles": before}, {"roles": clean})
+
+
 def create_user(db: Session, username: str, password: str, role: str, display_name: str = "",
-                email: str | None = None, actor: str = "system") -> StaffUser:
+                email: str | None = None, actor: str = "system", roles: list[str] | None = None) -> StaffUser:
     username = username.strip().lower()
-    if role not in ROLES:
-        raise UserError("Unknown role.")
+    chosen = normalize_roles(roles if roles else [role])
     if len(password) < 10:
         raise UserError("Password must be at least 10 characters.", field="password")
     if db.scalar(select(StaffUser).where(func.lower(StaffUser.username) == username)):
         raise UserError("That username is already taken.", field="username")
     u = StaffUser(username=username, display_name=display_name or username,
-                  password_hash=security.hash_password(password), role=role, email=email)
+                  password_hash=security.hash_password(password), role=primary_role(chosen), roles=chosen, email=email)
     db.add(u)
     db.flush()
-    audit.record(db, actor, "staff.create", "staff_user", u.id, after={"username": username, "role": role})
+    audit.record(db, actor, "staff.create", "staff_user", u.id, after={"username": username, "roles": chosen})
     return u
 
 

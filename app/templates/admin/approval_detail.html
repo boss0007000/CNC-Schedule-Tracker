@@ -19,7 +19,7 @@
 <div>
 {% for a in approvals %}<div class="success"><strong>{{ a.number }}</strong> ({{ a.status }}) · expires {{ a.expires_at|localdate }} · <a href="/admin/approval-records/{{ a.id }}">print record</a>
 {% if a.status == 'active' %}<form class="inline" method="post" action="/admin/approvals/{{ a.id }}/revoke" data-confirm="Revoke this approval? Existing reservations are not cancelled automatically."><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input name="reason" aria-label="Reason" placeholder="Reason" required class="sm w10"><button class="small danger">Revoke</button></form>{% endif %}</div>{% endfor %}
-{% if p.status in ('submitted', 'modifications_requested') and staff.role != 'monitor' %}
+{% if p.status in ('submitted', 'modifications_requested') and 'projects.review' in staff.perms %}
 <form method="post" action="/admin/approvals/{{ p.id }}/decide" class="card"><h2>Approve</h2>
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="approve">
 <fieldset><legend>Covered machines</legend>{% for m in machines %}<div class="check"><input type="checkbox" id="am{{ m.id }}" name="machine_ids" value="{{ m.id }}" {% if m.id in p.machine_ids %}checked{% endif %}><label for="am{{ m.id }}">{{ m.name }}</label></div>{% endfor %}</fieldset>

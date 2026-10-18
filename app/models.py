@@ -41,7 +41,7 @@ def _now() -> datetime:
 
 # --- status vocabularies -----------------------------------------------------
 STANDINGS = ["freshman", "sophomore", "junior", "senior", "graduate"]
-ROLES = ["monitor", "supervisor", "admin"]  # ascending privilege
+ROLES = ["monitor", "maintenance", "scheduler", "trainer", "part_reviewer", "floor_supervisor", "supervisor", "admin"]
 
 PROJECT_SUBMITTED = "submitted"
 PROJECT_CHANGES = "modifications_requested"
@@ -140,7 +140,8 @@ class StaffUser(Base):
     display_name: Mapped[str] = mapped_column(String(120), default="")
     email: Mapped[str | None] = mapped_column(String(255))
     password_hash: Mapped[str] = mapped_column(String(255))
-    role: Mapped[str] = mapped_column(String(20), default="monitor")
+    role: Mapped[str] = mapped_column(String(30), default="monitor")  # primary (highest) role, for display
+    roles: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'"))  # all roles held (see services/staffauth)
     location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
     active: Mapped[bool] = mapped_column(default=True)
     failed_logins: Mapped[int] = mapped_column(default=0)
@@ -148,7 +149,6 @@ class StaffUser(Base):
     session_epoch: Mapped[int] = mapped_column(default=0)  # bump to invalidate sessions
     created_at: Mapped[datetime] = mapped_column(default=_now)
     last_login_at: Mapped[datetime | None]
-    __table_args__ = (CheckConstraint("role in ('admin','supervisor','monitor')", name="ck_staff_role"),)
 
 
 class MachineGroup(Base):

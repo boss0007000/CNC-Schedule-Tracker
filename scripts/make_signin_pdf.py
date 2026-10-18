@@ -5,7 +5,7 @@ from reportlab.pdfgen import canvas
 c = canvas.Canvas("docs/paper-signin-sheet.pdf", pagesize=landscape(letter))
 w, h = landscape(letter)
 c.setFont("Helvetica-Bold", 18)
-c.drawString(36, h - 40, "Student Machine Shop — PAPER SIGN-IN SHEET (outage use)")
+c.drawString(36, h - 40, "GENE HAAS ADVANCED MANUFACTURING LAB — PAPER SIGN-IN SHEET (outage use)")
 c.setFont("Helvetica", 10)
 c.drawString(36, h - 58, "Date: ____________   Supervisor on duty: ______________________   Reason for paper mode: ______________________")
 cols = [("Name", 130), ("Campus email", 150), ("Approval # (APR-)", 90), ("Machine", 90), ("Time in", 50), ("Time out", 50),

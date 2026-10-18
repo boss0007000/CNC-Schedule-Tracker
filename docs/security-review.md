@@ -5,7 +5,7 @@ Checked by automated tests (`tests/test_m9_hardening.py`) unless noted.
 | Area | Result |
 |---|---|
 | CSRF | Every POST route is enumerated by a test and rejects missing/forged tokens (double-submit cookie). |
-| AuthN/AuthZ | Every `/admin` route enumerated: unauthenticated → login redirect. Role matrix tested (monitor read-only, supervisor ops, admin-only settings/users/audit/backups/sensitive CSV). |
+| AuthN/AuthZ | Every `/admin` route enumerated: unauthenticated → login redirect. Permission-based roles (monitor, floor supervisor, part reviewer, trainer, scheduler, maintenance, lead supervisor, admin; multiple per person). Tested: monitor gets 403 on every admin write route, specialised roles can't reach users/settings, last-admin protection, default-deny for any new write route. |
 | Passwords / lockout | argon2id; ≥10 chars; 5 failures → 15 min lock; password change invalidates sessions; login also rate-limited per IP. |
 | Student identity | Code is 6 digits, hashed (HMAC) at rest, 10 min, 5 attempts, per-email + per-IP limits, single use; signed 8 h cookie (HttpOnly, SameSite=Lax, Secure in prod). |
 | IDOR | Reservation / approval / project / waitlist / done pages require ownership or a signed token; others get 404. Wrong-owner and unknown references return identical messages. |

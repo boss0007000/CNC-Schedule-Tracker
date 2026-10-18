@@ -37,5 +37,5 @@
 {% if email %}{% if hist %}<div class="card"><strong>{{ hist.student.full_name }}</strong> ({{ hist.student.email }})<dl class="kv"><dt>Reservations</dt><dd>{{ hist.reservations }}</dd><dt>Sessions</dt><dd>{{ hist.sessions }}</dd><dt>Hours used</dt><dd>{{ hist.hours }}</dd><dt>No-shows</dt><dd>{{ hist.no_shows }}</dd><dt>Cancelled</dt><dd>{{ hist.cancelled }}</dd><dt>Auto-closed</dt><dd>{{ hist.auto_closed }}</dd></dl></div>{% else %}<p>No student with that email.</p>{% endif %}{% endif %}
 
 <h2>CSV exports</h2>
-<ul>{% for t in tables %}{% if t not in admin_only or staff.role == 'admin' %}<li><a href="/admin/export/{{ t }}.csv">{{ t }}</a></li>{% endif %}{% endfor %}</ul>
+<ul>{% for t in tables %}{% if t not in admin_only or 'admin' in staff.perms %}<li><a href="/admin/export/{{ t }}.csv">{{ t }}</a></li>{% endif %}{% endfor %}</ul>
 {% endblock %}

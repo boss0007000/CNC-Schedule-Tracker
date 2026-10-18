@@ -9,7 +9,7 @@
 {% if waiting_checkins %}<div class="errors" role="alert"><strong>{{ waiting_checkins }} check-in{{ 's' if waiting_checkins != 1 }} waiting for a supervisor.</strong> <a class="btn small" href="/admin/checkins">Review now</a></div>{% endif %}
 {% if cfg.emergency_active %}
 <div class="errors" role="alert"><strong>EMERGENCY CLOSE ACTIVE.</strong> {{ cfg.emergency_message }}
-{% if staff.role != 'monitor' %}<form method="post" action="/admin/emergency" class="toolbar"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="reopen">
+{% if 'emergency' in staff.perms %}<form method="post" action="/admin/emergency" class="toolbar"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="reopen">
 <div class="check"><input id="rc" type="checkbox" name="confirm"><label for="rc">I confirm it is safe to reopen</label></div><button type="submit">Reopen shop</button></form>{% endif %}</div>
 {% endif %}
 <div class="tiles">
@@ -38,7 +38,7 @@
 <h2>Today's reservations</h2>
 <div class="tablewrap"><table><tr><th>Time</th><th>Machine</th><th>Student</th><th>Ref</th><th>Status</th></tr>
 {% for r in todays %}<tr><td>{{ r.start_at|localtime }}–{{ r.end_at|localtime }}</td><td>{{ r.machine.name }}</td><td>{{ r.student.full_name }}</td><td>{{ r.ref }}</td><td>{{ r.status|replace('_',' ') }}</td></tr>{% else %}<tr><td colspan="5">None today.</td></tr>{% endfor %}</table></div>
-{% if staff.role != 'monitor' and not cfg.emergency_active %}
+{% if 'emergency' in staff.perms and not cfg.emergency_active %}
 <h2>Emergency</h2>
 <form method="post" action="/admin/emergency" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="close">
 <p>Closes every machine, shows a red banner on the TV and emails everyone currently checked in.</p>

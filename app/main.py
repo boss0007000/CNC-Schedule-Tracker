@@ -36,12 +36,27 @@ def _configure_logging():
     root.setLevel(logging.INFO)
 
 
+def _apply_branding(db):
+    """Rename the old default shop name and repair 'Hass'-style misspellings of Haas in machine names."""
+    import re
+
+    from app.models import Machine, Setting
+    row = db.get(Setting, "shop_name")
+    if row is not None and str(row.value).strip().strip('"') in ("Student Machine Shop", "Machine Shop", ""):
+        row.value = "GENE HAAS ADVANCED MANUFACTURING LAB"
+    for m in db.scalars(select(Machine)):
+        fixed = re.sub(r"\b(hass|haus|haaz|hasss|haas)\b", "Haas", m.name, flags=re.I)
+        if fixed != m.name:
+            m.name = fixed
+
+
 def bootstrap(db):
     """Base data on every boot; first admin from env vars (and an env-driven password reset for recovery)."""
     from sqlalchemy import func
 
     from app.services import audit, shopconfig, staffauth
     shopconfig.ensure_base_data(db)
+    _apply_branding(db)
     c = get_config()
     if not (c.bootstrap_admin_username and c.bootstrap_admin_password):
         return
@@ -82,7 +97,7 @@ def create_app() -> FastAPI:
         if sched:
             sched.shutdown(wait=False)
 
-    app = FastAPI(title="Student Machine Shop", lifespan=lifespan, docs_url=None, redoc_url=None,
+    app = FastAPI(title="Gene Haas Advanced Manufacturing Lab", lifespan=lifespan, docs_url=None, redoc_url=None,
                   openapi_url=None, dependencies=[Depends(web.csrf_protect)])
     app.mount("/static", StaticFiles(directory=str(web.BASE / "static")), name="static")
 

@@ -11,10 +11,10 @@ from app.db import get_db
 from app.errors import UserError
 from app.models import Approval, Machine, Project, ProjectFile, StaffUser
 from app.services import files, projects
-from app.web import get_form, render, staff_actor, staff_dep
+from app.services import staffauth
+from app.web import get_form, need, render, require, staff_actor, staff_dep
 
 router = APIRouter(prefix="/admin")
-supervisor = staff_dep("supervisor")
 monitor = staff_dep("monitor")
 
 
@@ -67,7 +67,7 @@ def _parse_date_end(raw: str | None) -> datetime | None:
 
 
 @router.post("/approvals/{pid}/decide")
-def decide(pid: int, request: Request, form=Depends(get_form), user: StaffUser = Depends(supervisor),
+def decide(pid: int, request: Request, form=Depends(get_form), user: StaffUser = Depends(need('projects.review')),
            db: Session = Depends(get_db)):
     p = db.get(Project, pid)
     if p is None:
@@ -101,7 +101,7 @@ def decide(pid: int, request: Request, form=Depends(get_form), user: StaffUser =
 
 
 @router.post("/approvals/{aid}/revoke")
-def revoke(aid: int, form=Depends(get_form), user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+def revoke(aid: int, form=Depends(get_form), user: StaffUser = Depends(need('projects.review')), db: Session = Depends(get_db)):
     a = db.get(Approval, aid)
     if a is None:
         raise HTTPException(404, "Approval not found.")
@@ -174,7 +174,7 @@ def dashboard(request: Request, user: StaffUser = Depends(monitor), db: Session 
 
 
 @router.post("/emergency")
-def emergency_post(request: Request, form=Depends(get_form), user: StaffUser = Depends(supervisor),
+def emergency_post(request: Request, form=Depends(get_form), user: StaffUser = Depends(need('emergency')),
                    db: Session = Depends(get_db)):
     from app.services import emergency
     action = form.get("action")
@@ -254,7 +254,7 @@ def reservations_page(request: Request, view: str = "list", date: str = "", mach
 
 
 @router.post("/reservations/new")
-def reservation_new(request: Request, form=Depends(get_form), user: StaffUser = Depends(supervisor),
+def reservation_new(request: Request, form=Depends(get_form), user: StaffUser = Depends(need('reservations.manage')),
                     db: Session = Depends(get_db)):
     from app.services import staffres
     try:
@@ -271,7 +271,7 @@ def reservation_new(request: Request, form=Depends(get_form), user: StaffUser = 
 
 
 @router.post("/reservations/{rid}/{action}")
-def reservation_action(rid: int, action: str, form=Depends(get_form), user: StaffUser = Depends(supervisor),
+def reservation_action(rid: int, action: str, form=Depends(get_form), user: StaffUser = Depends(need('reservations.manage', 'sessions.force')),
                        db: Session = Depends(get_db)):
     from app.models import Reservation
     from app.services import reservations as rsv, sessions, staffres
@@ -279,6 +279,7 @@ def reservation_action(rid: int, action: str, form=Depends(get_form), user: Staf
     if r is None:
         raise HTTPException(404, "Reservation not found.")
     actor = staff_actor(user)
+    require(user, "sessions.force" if action == "checkin" else "reservations.manage")
     try:
         if action == "cancel":
             rsv.cancel(db, r, actor=actor, by_staff=True, reason=form.get("reason", ""))
@@ -323,7 +324,7 @@ def sessions_page(request: Request, show: str = "active", user: StaffUser = Depe
 
 
 @router.post("/sessions/{sid}/{action}")
-def session_action(sid: int, action: str, form=Depends(get_form), user: StaffUser = Depends(supervisor),
+def session_action(sid: int, action: str, form=Depends(get_form), user: StaffUser = Depends(need('sessions.force')),
                    db: Session = Depends(get_db)):
     from app.models import ShopSession
     from app.services import audit, sessions
@@ -409,7 +410,7 @@ def machine_detail(mid: int, request: Request, user: StaffUser = Depends(monitor
 
 
 @router.post("/machines/{mid}/{action}")
-def machine_action(mid: int, action: str, form=Depends(get_form), user: StaffUser = Depends(supervisor),
+def machine_action(mid: int, action: str, form=Depends(get_form), user: StaffUser = Depends(need('machines.status')),
                    db: Session = Depends(get_db)):
     from app.services import machines as ms
     m = db.get(Machine, mid)
@@ -434,7 +435,7 @@ def machine_action(mid: int, action: str, form=Depends(get_form), user: StaffUse
 
 
 @router.post("/maintenance/{rid}/close")
-def maintenance_close(rid: int, user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+def maintenance_close(rid: int, user: StaffUser = Depends(need('machines.status')), db: Session = Depends(get_db)):
     from app.models import MaintenanceRecord
     from app.services import machines as ms
     rec = db.get(MaintenanceRecord, rid)
@@ -478,7 +479,7 @@ def student_detail(sid: int, request: Request, user: StaffUser = Depends(monitor
 
 
 @router.post("/students/{sid}/{action}")
-def student_action(sid: int, action: str, form=Depends(get_form), user: StaffUser = Depends(supervisor),
+def student_action(sid: int, action: str, form=Depends(get_form), user: StaffUser = Depends(need('certs.manage', 'students.suspend')),
                    db: Session = Depends(get_db)):
     from app.models import Student
     from app.services import students as ss
@@ -486,6 +487,7 @@ def student_action(sid: int, action: str, form=Depends(get_form), user: StaffUse
     if s is None:
         raise HTTPException(404, "Student not found.")
     actor = staff_actor(user)
+    require(user, "certs.manage" if action == "cert" else "students.suspend")
     try:
         if action == "cert":
             exp = _parse_date_end(form.get("expires_on"))
@@ -507,7 +509,7 @@ def student_action(sid: int, action: str, form=Depends(get_form), user: StaffUse
 
 
 @router.post("/certs/{cid}/revoke")
-def cert_revoke(cid: int, user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+def cert_revoke(cid: int, user: StaffUser = Depends(need('certs.manage')), db: Session = Depends(get_db)):
     from app.models import Certification
     from app.services import students as ss
     c = db.get(Certification, cid)
@@ -533,7 +535,7 @@ def incidents_page(request: Request, user: StaffUser = Depends(monitor), db: Ses
 
 
 @router.post("/incidents/new")
-def incident_new(request: Request, form=Depends(get_form), user: StaffUser = Depends(supervisor),
+def incident_new(request: Request, form=Depends(get_form), user: StaffUser = Depends(need('incidents.write')),
                  db: Session = Depends(get_db)):
     from app.models import DamageReport, IncidentReport
     from app.services import incidents as inc
@@ -554,7 +556,7 @@ def incident_new(request: Request, form=Depends(get_form), user: StaffUser = Dep
 
 
 @router.post("/incidents/{iid}/resolve")
-def incident_resolve(iid: int, form=Depends(get_form), user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+def incident_resolve(iid: int, form=Depends(get_form), user: StaffUser = Depends(need('incidents.write')), db: Session = Depends(get_db)):
     from app.models import IncidentReport
     from app.services import incidents as inc
     row = db.get(IncidentReport, iid)
@@ -565,7 +567,7 @@ def incident_resolve(iid: int, form=Depends(get_form), user: StaffUser = Depends
 
 
 @router.post("/damage/{did}/status")
-def damage_status(did: int, form=Depends(get_form), user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+def damage_status(did: int, form=Depends(get_form), user: StaffUser = Depends(need('incidents.write')), db: Session = Depends(get_db)):
     from app.models import DamageReport
     from app.services import incidents as inc
     row = db.get(DamageReport, did)
@@ -594,12 +596,12 @@ def access_page(request: Request, user: StaffUser = Depends(monitor), db: Sessio
 
 
 @router.post("/access")
-def access_post(form=Depends(get_form), user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+def access_post(form=Depends(get_form), user: StaffUser = Depends(need('access.approved')), db: Session = Depends(get_db)):
     from app.models import ACCESS_SUPER
     from app.services import access
     action, level = form.get("action"), form.get("level", "")
     try:
-        if level == ACCESS_SUPER and user.role != "admin":
+        if level == ACCESS_SUPER and not staffauth.can(user, "access.super"):
             raise UserError("Only an admin can add students to the super approved list.")
         if action == "add":
             res = access.set_levels(db, staff_actor(user), access.parse_emails(form.get("emails", "")), level,
@@ -607,7 +609,7 @@ def access_post(form=Depends(get_form), user: StaffUser = Depends(supervisor), d
             msg = f"Added {res['added']}, moved {res['moved']}, already there {res['unchanged']}."
         elif action == "remove":
             existing = access.level_for(db, form.get("email", ""))
-            if existing == ACCESS_SUPER and user.role != "admin":
+            if existing == ACCESS_SUPER and not staffauth.can(user, "access.super"):
                 raise UserError("Only an admin can remove someone from the super approved list.")
             access.remove(db, staff_actor(user), form.get("email", ""))
             msg = "Removed."
@@ -628,7 +630,7 @@ def change_requests_page(request: Request, user: StaffUser = Depends(monitor), d
 
 # ================================================================ holds (staff)
 @router.post("/holds/{hid}/{action}")
-def hold_action(hid: int, action: str, form=Depends(get_form), user: StaffUser = Depends(supervisor),
+def hold_action(hid: int, action: str, form=Depends(get_form), user: StaffUser = Depends(need('machines.status')),
                 db: Session = Depends(get_db)):
     from app.models import MachineHold
     from app.services import holds
@@ -650,7 +652,7 @@ def hold_action(hid: int, action: str, form=Depends(get_form), user: StaffUser =
 
 
 @router.post("/hold-place/{mid}")
-def hold_place(mid: int, form=Depends(get_form), user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+def hold_place(mid: int, form=Depends(get_form), user: StaffUser = Depends(need('machines.status')), db: Session = Depends(get_db)):
     from app.models import Student
     from app.services import holds
     m = db.get(Machine, mid)
@@ -681,7 +683,7 @@ def checkins_page(request: Request, user: StaffUser = Depends(monitor), db: Sess
 
 
 @router.post("/checkins/{sid}/{action}")
-def checkin_decide(sid: int, action: str, user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+def checkin_decide(sid: int, action: str, user: StaffUser = Depends(need('checkins.decide')), db: Session = Depends(get_db)):
     from app.models import ShopSession
     from app.services import sessions
     s = db.get(ShopSession, sid)
@@ -721,7 +723,7 @@ def access_machines_save(form=Depends(get_form), user: StaffUser = Depends(admin
 
 
 @router.post("/session-adjust/{sid}")
-def session_adjust(sid: int, form=Depends(get_form), user: StaffUser = Depends(supervisor), db: Session = Depends(get_db)):
+def session_adjust(sid: int, form=Depends(get_form), user: StaffUser = Depends(need('sessions.force', 'reservations.manage')), db: Session = Depends(get_db)):
     """Change how long someone on a machine may stay (their reservation end), within their approval's limits."""
     from app.models import ShopSession
     from app.services import staffres

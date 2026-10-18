@@ -11,7 +11,7 @@ from app.models import (
     ACCESS_APPROVED, StaffUser,
     RES_CHECKED_IN, RES_COMPLETED, RES_CONFIRMED, DamageReport, MaintenanceRecord, Reservation, ShopSession, Student,
 )
-from app.services import access, audit, files, holds, notify, numbers, reservations, rotcode
+from app.services import access, audit, files, holds, notify, numbers, reservations, rotcode, staffauth
 from app.services import settings as shop_settings
 
 CHECKLIST_ITEMS = [("machine_cleaned", "Machine cleaned"), ("tools_returned", "Tools returned"),
@@ -88,8 +88,8 @@ def check_in(db: Session, student: Student, ref: str, shop_code: str, ip: str, *
 
 def is_supervisor(db: Session, email: str) -> bool:
     """Supervisors and admins don't need a second person to approve their own check-in."""
-    return db.scalar(select(StaffUser.id).where(StaffUser.active.is_(True), StaffUser.role.in_(("supervisor", "admin")),
-                                                 func.lower(StaffUser.email) == email.strip().lower())) is not None
+    u = db.scalar(select(StaffUser).where(StaffUser.active.is_(True), func.lower(StaffUser.email) == email.strip().lower()))
+    return u is not None and staffauth.can(u, "checkins.decide")
 
 
 def pending_session_for(db: Session, student_id: int) -> ShopSession | None:
@@ -295,7 +295,7 @@ def file_report(db: Session, machine, student, session, kind: str, text: str, ph
     db.flush()
     audit.record(db, actor, "machine.report", "machine", machine.id, after={"state": state, "report": rep.id})
     notify.to_staff(db, f"Machine reported: {machine.name} ({kind})",
-                    f"{student.full_name if student else 'Staff'} reported an issue on {machine.name}:\n\n{text}")
+                    f"{student.full_name if student else 'Staff'} reported an issue on {machine.name}:\n\n{text}", "machines.status")
     return rep
 
 

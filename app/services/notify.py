@@ -16,17 +16,18 @@ def _fmt(dt) -> str:
     return clock.to_local(dt).strftime("%A %b %d, %I:%M %p").replace(" 0", " ")
 
 
-def staff_recipients(db: Session) -> list[str]:
+def staff_recipients(db: Session, perm: str = "checkins.decide") -> list[str]:
+    """Who to email: STAFF_NOTIFY_EMAIL if set, else everyone whose role includes `perm`."""
+    from app.services import staffauth
     cfg = get_config()
     if cfg.staff_notify_email:
         return [e.strip() for e in cfg.staff_notify_email.split(",") if e.strip()]
-    rows = db.scalars(select(StaffUser).where(StaffUser.active.is_(True), StaffUser.email.is_not(None),
-                                              StaffUser.role.in_(["admin", "supervisor"])))
-    return [u.email for u in rows if u.email]
+    rows = db.scalars(select(StaffUser).where(StaffUser.active.is_(True), StaffUser.email.is_not(None)))
+    return [u.email for u in rows if u.email and staffauth.can(u, perm)]
 
 
-def to_staff(db: Session, subject: str, text: str) -> None:
-    for to in staff_recipients(db):
+def to_staff(db: Session, subject: str, text: str, perm: str = "checkins.decide") -> None:
+    for to in staff_recipients(db, perm):
         emailer.queue(db, to, subject, text)
 
 
@@ -72,7 +73,7 @@ def project_submitted(db: Session, p: Project, revised: bool = False) -> None:
                   f"— {_shop(db)}")
     to_staff(db, f"New {'resubmission' if revised else 'project submission'}: {p.title}",
              f"{p.student.full_name} ({p.student.email}) submitted “{p.title}”.\n"
-             f"Review it: {get_config().base_url}/admin/approvals/{p.id}")
+             f"Review it: {get_config().base_url}/admin/approvals/{p.id}", "projects.review")
 
 
 def project_approved(db: Session, a: Approval) -> None:
@@ -232,7 +233,7 @@ def hold_expired(db: Session, h) -> None:
                   f"{h.machine.name} has passed, so it is open to others again. If anything of yours is still in the machine, "
                   f"please collect it soon; staff have been told and will put it aside.\n\n— {_shop(db)}")
     to_staff(db, f"Hold expired: {h.machine.name}", f"{h.student.full_name}'s {h.kind} hold on {h.machine.name} expired. "
-                                                       f"Check whether tools or a setup still need clearing.")
+                                                       f"Check whether tools or a setup still need clearing.", "machines.status")
 
 
 def closing_prompt(db: Session, s) -> None:

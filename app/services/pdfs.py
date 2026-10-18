@@ -15,7 +15,7 @@ def approval_pdf(a) -> bytes:
     w, h = letter
     y = h - 0.9 * inch
     c.setFont("Helvetica-Bold", 20)
-    c.drawString(0.9 * inch, y, "Machine Shop Approval Record")
+    c.drawString(0.9 * inch, y, "Gene Haas Advanced Manufacturing Lab: Approval Record")
     y -= 0.5 * inch
     c.setFont("Helvetica-Bold", 28)
     c.drawString(0.9 * inch, y, a.number)

@@ -1,14 +1,14 @@
 """Staff auth, user management, audit log viewer."""
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import security
 from app.config import get_config
 from app.db import get_db
 from app.errors import UserError
-from app.models import ROLES, AuditLog, StaffUser
+from app.models import AuditLog, StaffUser
 from app.services import audit, staffauth
 from app.web import get_form, render, safe_next, staff_actor, staff_dep
 
@@ -45,10 +45,15 @@ def logout():
 
 
 # --- user management (admin only) ----------------------------------------------------
+def _users_ctx(db, errs=None, msg=None):
+    rows = db.scalars(select(StaffUser).order_by(StaffUser.username)).all()
+    return {"users": rows, "roles": staffauth.ROLE_ORDER, "info": staffauth.ROLE_INFO, "errs": errs or [], "msg": msg,
+            "roles_of": staffauth.roles_of, "perm_desc": staffauth.PERM_DESCRIPTIONS}
+
+
 @router.get("/users")
 def users(request: Request, user: StaffUser = Depends(staff_dep("admin")), db: Session = Depends(get_db)):
-    rows = db.scalars(select(StaffUser).order_by(StaffUser.username)).all()
-    return render(request, "admin/users.html", {"users": rows, "roles": ROLES, "errs": [], "msg": request.query_params.get("msg")})
+    return render(request, "admin/users.html", _users_ctx(db, msg=request.query_params.get("msg")))
 
 
 @router.post("/users")
@@ -57,33 +62,34 @@ def users_post(request: Request, form=Depends(get_form), user: StaffUser = Depen
     action = form.get("action")
     try:
         if action == "create":
-            staffauth.create_user(db, form.get("username", ""), form.get("password", ""), form.get("role", ""),
-                                  form.get("display_name", ""), form.get("email") or None, staff_actor(user))
-        elif action in ("deactivate", "activate", "reset_password", "set_role"):
+            chosen = form.getlist("roles") or ([form["role"]] if form.get("role") else [])
+            staffauth.create_user(db, form.get("username", ""), form.get("password", ""), chosen[0] if chosen else "",
+                                  form.get("display_name", ""), form.get("email") or None, staff_actor(user), roles=chosen)
+        elif action in ("deactivate", "activate", "reset_password", "set_roles"):
             target = db.get(StaffUser, int(form.get("id", 0)))
             if target is None:
                 raise UserError("Unknown user.")
-            if action in ("deactivate", "set_role") and target.id == user.id:
-                raise UserError("You can't change your own role or deactivate yourself.")
-            before = audit.snapshot(target, ["role", "active"])
             if action == "deactivate":
+                if target.id == user.id:
+                    raise UserError("You can't deactivate yourself.")
+                if "admin" in staffauth.roles_of(target):
+                    others = db.scalar(select(func.count()).select_from(StaffUser).where(
+                        StaffUser.active.is_(True), StaffUser.id != target.id, StaffUser.role == "admin")) or 0
+                    if not others:
+                        raise UserError("There must always be at least one active admin.")
                 target.active = False
                 target.session_epoch += 1
+                audit.record(db, staff_actor(user), "staff.deactivate", "staff_user", target.id)
             elif action == "activate":
                 target.active = True
-            elif action == "set_role":
-                if form.get("role") not in ROLES:
-                    raise UserError("Unknown role.")
-                target.role = form["role"]
-                target.session_epoch += 1
+                audit.record(db, staff_actor(user), "staff.activate", "staff_user", target.id)
+            elif action == "set_roles":
+                staffauth.set_roles(db, staff_actor(user), target, form.getlist("roles"))
             else:
                 staffauth.set_password(db, target, form.get("password", ""), staff_actor(user))
-            audit.record(db, staff_actor(user), f"staff.{action}", "staff_user", target.id, before,
-                         audit.snapshot(target, ["role", "active"]))
     except UserError as e:
         db.rollback()
-        rows = db.scalars(select(StaffUser).order_by(StaffUser.username)).all()
-        return render(request, "admin/users.html", {"users": rows, "roles": ROLES, "errs": [e.message], "msg": None}, status=400)
+        return render(request, "admin/users.html", _users_ctx(db, [e.message]), status=400)
     return RedirectResponse("/admin/users?msg=Saved", status_code=303)
 
 

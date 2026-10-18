@@ -1,4 +1,4 @@
-# Student Machine Shop Management System
+# Gene Haas Advanced Manufacturing Lab: Management System
 
 Replaces paper sign-ins and word-of-mouth scheduling: project approvals, machine reservations, QR check-in/out,
 and a live TV board. Students use phones (no accounts, no apps); staff use `/admin`; a TV shows `/tv`.
@@ -15,7 +15,7 @@ Zero-cost stack: Render (free web), Neon (free Postgres), Brevo (free email) —
 ```
 If PowerShell blocks the script: `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1`.
 Manual (any OS): `python -m venv .venv`, activate it, `pip install -r requirements-dev.txt`, `alembic upgrade head`, `python -m scripts.seed`, `uvicorn app.main:app --reload`.
-Demo logins (password `demo-password-123`): `admin`, `sam` (supervisor), `mo` (monitor). Verification codes are printed to the console in dev.
+Demo logins (password `demo-password-123`): `admin`, `sam` (lead supervisor), `mo` (monitor), `fran` (floor supervisor), `pat` (part reviewer), `tara` (trainer), `sky` (scheduler), `max` (maintenance). Verification codes are printed to the console in dev.
 Open `/tv`, `/admin`, `/submit`. Reset demo data any time: `python -m scripts.seed --reset-demo`.
 Seeded machines: 2× Haas Mini Mill, Haas VF-3, Haas ST-10, Fibercell FC50 (edit in Admin > Machines).
 

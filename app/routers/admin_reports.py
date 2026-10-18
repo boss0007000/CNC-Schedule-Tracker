@@ -10,13 +10,12 @@ from app import clock
 from app.db import get_db
 from app.errors import UserError
 from app.models import ShiftSchedule, ShopHours, StaffUser
-from app.services import audit, backup, pdfs, qr, reports, retention, shopconfig
+from app.services import audit, backup, pdfs, qr, reports, retention, shopconfig, staffauth
 from app.services import settings as shop_settings
 from app.web import get_form, render, staff_actor, staff_dep
 
 router = APIRouter(prefix="/admin")
 monitor = staff_dep("monitor")
-supervisor = staff_dep("supervisor")
 admin_only = staff_dep("admin")
 
 
@@ -49,7 +48,7 @@ def reports_page(request: Request, frm: str = "", to: str = "", email: str = "",
 
 @router.get("/export/{table}.csv")
 def export_csv(table: str, user: StaffUser = Depends(monitor), db: Session = Depends(get_db)):
-    if table in reports.ADMIN_ONLY and user.role != "admin":
+    if table in reports.ADMIN_ONLY and not staffauth.can(user, "admin"):
         raise HTTPException(403, "Only admins can export this table.")
     if table not in reports.exportable_tables():
         raise HTTPException(404, "Unknown table.")
@@ -125,7 +124,7 @@ def _settings_ctx(db, errs=None, msg=None):
             "exceptions": db.scalars(select(ShopHours).where(ShopHours.on_date.is_not(None)).order_by(ShopHours.on_date)).all(),
             "shifts": db.scalars(select(ShiftSchedule).where(ShiftSchedule.end_at > clock.now() - timedelta(days=1))
                                  .order_by(ShiftSchedule.start_at).limit(100)).all(),
-            "staff": db.scalars(select(StaffUser).where(StaffUser.active.is_(True), StaffUser.role != "monitor")).all()}
+            "staff": [u for u in db.scalars(select(StaffUser).where(StaffUser.active.is_(True))) if staffauth.can(u, "checkins.decide")]}
 
 
 @router.get("/settings")

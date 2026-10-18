@@ -1,8 +1,20 @@
 # Staff quick-start
 
 **Admin site:** `https://<your-site>/admin` — log in with your own username (never share logins).
-Roles: **monitor** = read-only · **supervisor** = approvals, reservations, machine status, overrides, incidents ·
-**admin** = everything incl. settings, users, audit log, backups.
+## Roles
+
+| Role | What they can do |
+|---|---|
+| **Monitor** | View everything; change nothing |
+| **Floor supervisor** (safety) | Approve/deny check-ins, end or adjust sessions, emergency stop, machine status, incidents, suspend students |
+| **Part reviewer** | Approve or reject project submissions (CAD review) |
+| **Trainer** | Record and revoke training certifications, manage the "approved" access list |
+| **Scheduler** | Create, move and cancel reservations |
+| **Maintenance** | Set machine status (maintenance, inspection), log incidents |
+| **Lead supervisor** | All day-to-day operations above |
+| **Admin** | Everything, plus settings, staff accounts, audit log, backups, the "super-approved" list |
+
+A person can hold several roles; their permissions combine. The last active admin can't be removed.
 
 ## Opening the shop
 1. Put the TV on `/tv` (full screen, F11). It shows the 4-digit **shop code**, machine status and the four QR codes.

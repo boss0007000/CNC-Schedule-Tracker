@@ -2,18 +2,23 @@
 {% from "_macros.html" import errors %}
 {% block mainclass %}wide{% endblock %}
 {% block content %}
-<h1>Staff users</h1>
+<h1>Staff users and roles</h1>
 {{ errors(errs) }}{% if msg %}<div class="success">{{ msg }}</div>{% endif %}
+<details class="card"><summary>What each role can do</summary>
+<div class="tablewrap"><table><tr><th>Role</th><th>What it is for</th><th>Permissions</th></tr>
+{% for r in roles %}<tr><td><strong>{{ info[r][0] }}</strong></td><td>{{ info[r][1] }}</td><td>{% for p in info[r][2]|sort %}{{ perm_desc[p] }}{% if not loop.last %}; {% endif %}{% endfor %}</td></tr>{% endfor %}</table></div>
+<p class="help">A person can hold several roles; they get everything every role they hold allows. Changing roles signs that person out so it applies immediately.</p></details>
 <div class="tablewrap"><table>
-<tr><th>User</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr>
-{% for u in users %}<tr><td>{{ u.display_name }} <span class="muted">({{ u.username }})</span></td><td>{{ u.role }}</td>
+<tr><th>User</th><th>Roles</th><th>Status</th><th>Last login</th><th>Actions</th></tr>
+{% for u in users %}<tr><td>{{ u.display_name }} <span class="muted">({{ u.username }})</span><br><span class="muted">{{ u.email or 'no email' }}</span></td>
+<td>{% for r in roles_of(u)|sort(attribute='') %}<span class="pill">{{ info[r][0] }}</span> {% endfor %}</td>
 <td>{{ 'active' if u.active else 'disabled' }}</td><td>{{ u.last_login_at|local }}</td>
 <td>
+<details><summary>Edit roles</summary><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}"><input type="hidden" name="action" value="set_roles">
+{% for r in roles %}<div class="check"><label><input type="checkbox" name="roles" value="{{ r }}" {% if r in roles_of(u) %}checked{% endif %}><span>{{ info[r][0] }}</span></label></div>{% endfor %}
+<button class="small">Save roles</button></form></details>
 <form class="inline" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}">
-<select name="role" aria-label="Role" class="sm auto">{% for r in roles %}<option {% if r==u.role %}selected{% endif %}>{{ r }}</option>{% endfor %}</select>
-<button class="small" name="action" value="set_role">Set role</button>
-{% if u.active %}<button class="small danger" name="action" value="deactivate">Disable</button>{% else %}<button class="small" name="action" value="activate">Enable</button>{% endif %}
-</form>
+{% if u.active %}<button class="small danger" name="action" value="deactivate">Disable</button>{% else %}<button class="small" name="action" value="activate">Enable</button>{% endif %}</form>
 <form class="inline" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}">
 <input type="password" name="password" placeholder="New password" aria-label="New password" autocomplete="new-password" class="sm w11">
 <button class="small secondary" name="action" value="reset_password">Reset password</button></form>
@@ -23,8 +28,9 @@
 <form method="post" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="create">
 <label for="nu">Username</label><input id="nu" name="username" required>
 <label for="nd">Display name</label><input id="nd" name="display_name">
-<label for="ne">Email (optional)</label><input id="ne" name="email" type="email">
-<label for="nr">Role</label><select id="nr" name="role">{% for r in roles %}<option>{{ r }}</option>{% endfor %}</select>
+<label for="ne">Email (needed to get alerts)</label><input id="ne" name="email" type="email">
+<fieldset><legend>Roles (choose one or more)</legend>
+{% for r in roles %}<div class="check"><label><input type="checkbox" name="roles" value="{{ r }}" {% if r == 'monitor' %}checked{% endif %}><span><strong>{{ info[r][0] }}</strong>: {{ info[r][1] }}</span></label></div>{% endfor %}</fieldset>
 <label for="np">Password (10+ characters)</label><input id="np" name="password" type="password" autocomplete="new-password" required>
 <button class="block" type="submit">Create user</button></form>
 {% endblock %}

@@ -29,7 +29,7 @@ class Config(BaseSettings):
 
     email_provider: str = "console"  # console | memory | brevo | resend | smtp
     email_from: str = "machineshop@example.edu"
-    email_from_name: str = "Student Machine Shop"
+    email_from_name: str = "Gene Haas Advanced Manufacturing Lab"
     brevo_api_key: str = ""
     resend_api_key: str = ""
     smtp_host: str = ""

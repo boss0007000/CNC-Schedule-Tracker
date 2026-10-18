@@ -5,9 +5,9 @@
 {% if msg %}<div class="notice" role="status">{{ msg }}</div>{% endif %}
 <p>Status now: <span class="pill s-{{ state.status }}">{{ state.label }}</span>{% if state.reason %} — {{ state.reason }}{% endif %} · maintenance flag: <strong>{{ m.maintenance_state|replace('_',' ') }}</strong>{% if m.override_status %} · manual override by {{ m.override_by }}{% endif %}</p>
 {% if hold %}<div class="errors"><strong>{{ 'Setup' if hold.kind == 'setup' else 'Tools' }} hold</strong> by {{ hold.student.full_name }} ({{ hold.student.phone|pretty_phone or 'no number' }}) until {{ hold.expires_at|local }}.
-{% if staff.role != 'monitor' %}<form class="inline" method="post" action="/admin/holds/{{ hold.id }}/release" data-confirm="Release this hold?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small danger">Release</button></form>
+{% if 'machines.status' in staff.perms %}<form class="inline" method="post" action="/admin/holds/{{ hold.id }}/release" data-confirm="Release this hold?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small danger">Release</button></form>
 <form class="inline" method="post" action="/admin/holds/{{ hold.id }}/extend"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input class="sm w9" type="number" name="days" min="1" max="10" value="1" aria-label="Open days to extend"><button class="small secondary">Extend (open days)</button></form>{% endif %}</div>{% endif %}
-{% if staff.role != 'monitor' %}
+{% if 'machines.status' in staff.perms %}
 {% if not hold %}<form method="post" action="/admin/hold-place/{{ m.id }}" class="card toolbar"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <div><label for="he">Place a hold for a student (email)</label><input id="he" type="email" name="email" required></div>
 <div><label for="hk">What's staying</label><select id="hk" name="kind"><option value="setup">Setup: do not touch</option><option value="tools">Tools only: do not touch</option></select></div><button>Place hold</button></form>{% endif %}
@@ -29,7 +29,7 @@
 <h2>Maintenance log</h2>
 <div class="tablewrap"><table><tr><th>Opened</th><th>Type</th><th>Description</th><th>By</th><th>Closed</th><th></th></tr>
 {% for r in records %}<tr><td>{{ r.opened_at|local }}</td><td>{{ r.kind }}{% if r.window_start %}<br>{{ r.window_start|local }} → {{ r.window_end|local }}{% endif %}</td><td>{{ r.description }}</td><td>{{ r.opened_by }}</td><td>{{ r.closed_at|local }}</td>
-<td>{% if not r.closed_at and staff.role != 'monitor' %}<form class="inline" method="post" action="/admin/maintenance/{{ r.id }}/close"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary">Close</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="6">No records.</td></tr>{% endfor %}</table></div>
+<td>{% if not r.closed_at and 'machines.status' in staff.perms %}<form class="inline" method="post" action="/admin/maintenance/{{ r.id }}/close"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary">Close</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="6">No records.</td></tr>{% endfor %}</table></div>
 <h2>Damage reports</h2>
 <div class="tablewrap"><table><tr><th>When</th><th>Student</th><th>Type</th><th>Description</th><th>Photo</th></tr>
 {% for d in damage %}<tr><td>{{ d.created_at|local }}</td><td>{{ d.student.full_name if d.student else '—' }}</td><td>{{ d.severity }}</td><td>{{ d.description }}</td><td>{% if d.photo_key %}<a href="{{ file_link('damage', d.id) }}" target="_blank" rel="noopener">photo</a>{% endif %}</td></tr>{% else %}<tr><td colspan="5">None.</td></tr>{% endfor %}</table></div>

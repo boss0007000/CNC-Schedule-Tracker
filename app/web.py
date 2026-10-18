@@ -135,22 +135,46 @@ def public_post_guard(request: Request, form=Depends(get_form), db: Session = De
     db.commit()
 
 
+def _signed_in_staff(request: Request, db: Session) -> StaffUser:
+    user = staffauth.user_from_token(db, request.cookies.get(staffauth.COOKIE))
+    if user is None:
+        path = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        raise NeedsStaffLogin(path)
+    # plain snapshot: error pages render after the DB session is closed
+    perms = staffauth.perms_of(user)
+    request.state.staff = SimpleNamespace(id=user.id, username=user.username, display_name=user.display_name, role=user.role,
+                                          roles=sorted(staffauth.roles_of(user)), perms=perms)
+    return user
+
+
 def staff_dep(minimum: str = "monitor"):
+    """'monitor' = any signed-in staff member, for READ-ONLY (GET) pages. 'admin' = needs the admin permission.
+    Anything that changes data must use need(<permission>) instead."""
     def dep(request: Request, db: Session = Depends(get_db)) -> StaffUser:
-        user = staffauth.user_from_token(db, request.cookies.get(staffauth.COOKIE))
-        if user is None:
-            path = request.url.path + (f"?{request.url.query}" if request.url.query else "")
-            raise NeedsStaffLogin(path)
-        # Monitors are read-only: any state-changing request needs supervisor+.
-        need = minimum if request.method in ("GET", "HEAD") else (
-            minimum if staffauth.role_rank(minimum) >= staffauth.role_rank("supervisor") else "supervisor")
-        if not staffauth.has_role(user, need):
-            raise HTTPException(403, "Your role does not allow this action.")
-        # plain snapshot: error pages render after the DB session is closed
-        request.state.staff = SimpleNamespace(id=user.id, username=user.username,
-                                              display_name=user.display_name, role=user.role)
+        user = _signed_in_staff(request, db)
+        if minimum == "admin":
+            if not staffauth.can(user, "admin"):
+                raise HTTPException(403, "Your role does not allow this action.")
+        elif request.method not in ("GET", "HEAD"):
+            raise HTTPException(403, "Your role does not allow this action.")  # default-deny: writes need need()
         return user
     return dep
+
+
+def need(*perms: str):
+    """Allow staff holding ANY of the given permissions (see services/staffauth.ROLE_INFO)."""
+    def dep(request: Request, db: Session = Depends(get_db)) -> StaffUser:
+        user = _signed_in_staff(request, db)
+        if not any(staffauth.can(user, p) for p in perms):
+            raise HTTPException(403, "Your role does not allow this action.")
+        return user
+    return dep
+
+
+def require(user: StaffUser, perm: str) -> None:
+    """Second-level check inside handlers that serve several actions."""
+    if not staffauth.can(user, perm):
+        raise HTTPException(403, "Your role does not allow this action.")
 
 
 def staff_actor(user: StaffUser) -> str:

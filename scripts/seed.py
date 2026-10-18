@@ -54,6 +54,12 @@ def seed_demo(db) -> dict:
         "admin": staffauth.create_user(db, "admin", DEMO_PASSWORD, "admin", "Alex Admin", "admin@example.edu"),
         "sam": staffauth.create_user(db, "sam", DEMO_PASSWORD, "supervisor", "Sam Supervisor", "sam@example.edu"),
         "mo": staffauth.create_user(db, "mo", DEMO_PASSWORD, "monitor", "Mo Monitor", "mo@example.edu"),
+        # one demo account per specialised role, for trying the permission levels
+        "fran": staffauth.create_user(db, "fran", DEMO_PASSWORD, "floor_supervisor", "Fran Floor (safety)", "fran@example.edu"),
+        "pat": staffauth.create_user(db, "pat", DEMO_PASSWORD, "part_reviewer", "Pat Parts (reviews projects)", "pat@example.edu"),
+        "tara": staffauth.create_user(db, "tara", DEMO_PASSWORD, "trainer", "Tara Trainer", "tara@example.edu"),
+        "sky": staffauth.create_user(db, "sky", DEMO_PASSWORD, "scheduler", "Sky Scheduler", "sky@example.edu"),
+        "max": staffauth.create_user(db, "max", DEMO_PASSWORD, "maintenance", "Max Maintenance", "max@example.edu"),
     }
     # Supervisor on duty Mon-Fri 08:00-22:00 for the next 3 weeks.
     today = clock.to_local(clock.now()).date()
@@ -143,7 +149,8 @@ def main() -> int:
             print("Data already present; use --reset-demo to rebuild.")
             return 0
         info = seed_demo(db)
-    print(f"Demo data ready. Staff logins: admin / sam (supervisor) / mo (monitor), password: {DEMO_PASSWORD}")
+    print(f"Demo data ready. Staff logins (password {DEMO_PASSWORD}): admin, sam (lead supervisor), mo (monitor), "
+          f"fran (floor supervisor), pat (part reviewer), tara (trainer), sky (scheduler), max (maintenance)")
     print("Approval numbers:", ", ".join(info["approvals"]))
     return 0
 

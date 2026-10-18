@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app import clock
 from app.errors import UserError
 from app.models import ShiftSchedule, ShopHours, StaffUser
-from app.services import audit
+from app.services import audit, staffauth
 
 def ensure_base_data(db: Session) -> None:
     """Idempotent: the default location and Mon-Fri 08:00-22:00 hours. Runs on every boot, so a brand-new
@@ -83,7 +83,7 @@ def delete_exception(db: Session, actor: str, row: ShopHours) -> None:
 def add_shift(db: Session, actor: str, staff_id: int, start: datetime, end: datetime, repeat_weeks: int = 0,
               weekdays_only: bool = False) -> int:
     staff = db.get(StaffUser, staff_id)
-    if staff is None or staff.role == "monitor":
+    if staff is None or not staffauth.can(staff, "checkins.decide"):
         raise UserError("Choose a supervisor or admin for the shift.")
     if end <= start or (end - start) > timedelta(hours=16):
         raise UserError("A shift must end after it starts and last at most 16 hours.")

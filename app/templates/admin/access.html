@@ -9,25 +9,25 @@
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <div class="tablewrap"><table><tr><th>Machine</th><th>Approved</th><th>Super approved</th><th></th></tr>
 {% for m in machines %}<tr><td>{{ m.name }}</td>
-<td><input type="checkbox" name="a_{{ m.id }}" {% if A in levels[m.id] %}checked{% endif %} {% if staff.role != 'admin' %}disabled{% endif %} aria-label="{{ m.name }}: Approved group may book"></td>
-<td><input type="checkbox" name="s_{{ m.id }}" {% if S in levels[m.id] %}checked{% endif %} {% if staff.role != 'admin' %}disabled{% endif %} aria-label="{{ m.name }}: Super approved group may book"></td>
+<td><input type="checkbox" name="a_{{ m.id }}" {% if A in levels[m.id] %}checked{% endif %} {% if 'admin' not in staff.perms %}disabled{% endif %} aria-label="{{ m.name }}: Approved group may book"></td>
+<td><input type="checkbox" name="s_{{ m.id }}" {% if S in levels[m.id] %}checked{% endif %} {% if 'admin' not in staff.perms %}disabled{% endif %} aria-label="{{ m.name }}: Super approved group may book"></td>
 <td>{% if not levels[m.id] %}<span class="pill s-under_maintenance">Staff-run: students submit parts only</span>{% endif %}</td></tr>{% endfor %}</table></div>
-<p class="help">Untick both for a staff-run machine. Students can still submit parts for it. {% if staff.role != 'admin' %}Only an admin can change this.{% endif %}</p>
-{% if staff.role == 'admin' %}<button type="submit">Save machine access</button>{% endif %}</form>
+<p class="help">Untick both for a staff-run machine. Students can still submit parts for it. {% if 'admin' not in staff.perms %}Only an admin can change this.{% endif %}</p>
+{% if 'admin' in staff.perms %}<button type="submit">Save machine access</button>{% endif %}</form>
 {% for level, title in [(S, 'Super approved'), (A, 'Approved')] %}
 <h2>{{ title }} ({{ roster[level]|length }})</h2>
 <div class="tablewrap"><table><tr><th>Email</th><th>Name (once they have signed in)</th><th>Added by</th><th>Note</th><th></th></tr>
 {% for r in roster[level] %}<tr><td>{{ r.email }}</td><td>{{ known.get(r.email, '—') }}</td><td>{{ r.added_by }}</td><td>{{ r.note or '' }}</td>
-<td>{% if staff.role != 'monitor' and (level == A or staff.role == 'admin') %}
+<td>{% if ('access.approved' in staff.perms and level == A) or 'access.super' in staff.perms %}
 <form class="inline" method="post" action="/admin/access"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="remove"><input type="hidden" name="email" value="{{ r.email }}"><button class="small danger">Remove</button></form>
 <form class="inline" method="post" action="/admin/access"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="add"><input type="hidden" name="emails" value="{{ r.email }}"><input type="hidden" name="level" value="{{ A if level == S else S }}">
-{% if level == A and staff.role == 'admin' %}<button class="small secondary">Move to super approved</button>{% elif level == S %}<button class="small secondary">Move to approved</button>{% endif %}</form>{% endif %}</td></tr>
+{% if level == A and 'access.super' in staff.perms %}<button class="small secondary">Move to super approved</button>{% elif level == S %}<button class="small secondary">Move to approved</button>{% endif %}</form>{% endif %}</td></tr>
 {% else %}<tr><td colspan="5">Nobody yet.</td></tr>{% endfor %}</table></div>
 {% endfor %}
-{% if staff.role != 'monitor' %}
+{% if 'access.approved' in staff.perms %}
 <form method="post" action="/admin/access" class="card"><h2>Add students</h2><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="add">
 <label for="em">Campus emails (paste several: one per line or separated by commas)</label><textarea id="em" name="emails" required></textarea>
-<label for="lv">List</label><select id="lv" name="level"><option value="{{ A }}">Approved</option>{% if staff.role == 'admin' %}<option value="{{ S }}">Super approved</option>{% endif %}</select>
-{% if staff.role != 'admin' %}<p class="help">Only an admin can add to the super approved list.</p>{% endif %}
+<label for="lv">List</label><select id="lv" name="level"><option value="{{ A }}">Approved</option>{% if 'access.super' in staff.perms %}<option value="{{ S }}">Super approved</option>{% endif %}</select>
+{% if 'access.super' not in staff.perms %}<p class="help">Only an admin can add to the super approved list.</p>{% endif %}
 <label for="nt">Note (optional)</label><input id="nt" name="note"><button class="block" type="submit">Add</button></form>{% endif %}
 {% endblock %}

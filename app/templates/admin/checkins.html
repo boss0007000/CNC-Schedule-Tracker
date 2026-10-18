@@ -13,7 +13,7 @@
 <li>{{ '✔' if a.on_list and a.machine_ok else '✘' }} {{ 'On the access list for this machine' if a.on_list and a.machine_ok else 'Not cleared for this machine by the access lists' }}</li>
 <li>{% if a.cert_required %}{{ '✔' if a.cert_ok else '✘' }} {{ 'Certification current' ~ (' until ' ~ (a.cert_expires|localdate) if a.cert_expires else '') if a.cert_ok else 'No current certification' }}{% else %}✔ No certification needed for this machine{% endif %}</li>
 <li>{{ '✔' if a.waiver else '✘' }} Safety waiver {{ 'signed' if a.waiver else 'NOT signed' }}</li></ul>
-{% if staff.role != 'monitor' %}<form class="inline" method="post" action="/admin/checkins/{{ s.id }}/approve"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Approve: they're authorized</button></form>
+{% if 'checkins.decide' in staff.perms %}<form class="inline" method="post" action="/admin/checkins/{{ s.id }}/approve"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Approve: they're authorized</button></form>
 <form class="inline" method="post" action="/admin/checkins/{{ s.id }}/deny" data-confirm="Deny this check-in?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="danger" type="submit">Deny</button></form>{% endif %}</div>
 {% else %}<div class="notice">Nobody is waiting.</div>{% endfor %}
 <h2>Recent decisions</h2>

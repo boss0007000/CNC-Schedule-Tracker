@@ -21,20 +21,22 @@
 {% else %}
 <div class="tablewrap"><table><tr><th>When</th><th>Machine</th><th>Student</th><th>Ref</th><th>Status</th><th>Actions</th></tr>
 {% for r in rows %}<tr><td>{{ r.start_at|local }} – {{ r.end_at|localtime }}</td><td>{{ r.machine.name }}</td><td>{{ r.student.full_name }}<br><span class="muted">{{ r.student.email }}</span></td><td>{{ r.ref }}{% if r.manual %} <span class="muted">(manual)</span>{% endif %}</td><td>{{ r.status|replace('_',' ') }}</td>
-<td>{% if r.status == 'confirmed' and staff.role != 'monitor' %}
-<form class="inline" method="post" action="/admin/reservations/{{ r.id }}/cancel" data-confirm="Cancel and email the student?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small danger">Cancel</button></form>
+<td>{% if r.status == 'confirmed' and ('reservations.manage' in staff.perms or 'sessions.force' in staff.perms) %}
+{% if 'reservations.manage' in staff.perms %}<form class="inline" method="post" action="/admin/reservations/{{ r.id }}/cancel" data-confirm="Cancel and email the student?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small danger">Cancel</button></form>
 <form class="inline" method="post" action="/admin/reservations/{{ r.id }}/release" data-confirm="Release this slot silently?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary">Release</button></form>
 <form class="inline" method="post" action="/admin/reservations/{{ r.id }}/noshow" data-confirm="Mark as no-show?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary">No-show</button></form>
-<form class="inline" method="post" action="/admin/reservations/{{ r.id }}/checkin"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input name="reason" aria-label="Reason to force check-in" placeholder="Reason to force check-in" required class="sm w11"><button class="small">Force check-in</button></form>
-<details><summary>Edit time</summary>{% set l = limits.get(r.id) %}
+{% endif %}
+{% if 'sessions.force' in staff.perms %}<form class="inline" method="post" action="/admin/reservations/{{ r.id }}/checkin"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input name="reason" aria-label="Reason to force check-in" placeholder="Reason to force check-in" required class="sm w11"><button class="small">Force check-in</button></form>
+{% endif %}
+{% if 'reservations.manage' in staff.perms %}<details><summary>Edit time</summary>{% set l = limits.get(r.id) %}
 {% if l %}<p class="help">Approval {{ r.approval.number }}: {% if l.max_hours is not none %}{{ l.left_hours|hours }} of {{ l.max_hours|hours }} h left (not counting this booking){% else %}no hour cap{% endif %}{% if l.max_sessions %} · {{ l.used_sessions }}/{{ l.max_sessions }} sessions{% endif %} · expires {{ l.expires_at|localdate }} · longest single session {{ l.cap_hours|hours }} h. Edits beyond these are refused.</p>{% endif %}
 <form method="post" action="/admin/reservations/{{ r.id }}/move"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label>Machine<select name="machine_id">{% for m in machines %}<option value="{{ m.id }}" {% if m.id == r.machine_id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></label>
 <label>Start<input type="datetime-local" name="start" value="{{ r.start_at|localinput }}"></label><label>End<input type="datetime-local" name="end" value="{{ r.end_at|localinput }}"></label>
-<label>Reason (the student is told)<input name="reason" required></label><button class="small">Save</button></form></details>
+<label>Reason (the student is told)<input name="reason" required></label><button class="small">Save</button></form></details>{% endif %}
 {% endif %}</td></tr>{% else %}<tr><td colspan="6">No reservations.</td></tr>{% endfor %}</table></div>
 {% endif %}
-{% if staff.role != 'monitor' %}
+{% if 'reservations.manage' in staff.perms %}
 <h2>Create a reservation</h2>
 <form method="post" action="/admin/reservations/new" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <label for="ne">Student email</label><input id="ne" name="email" type="email" required>
