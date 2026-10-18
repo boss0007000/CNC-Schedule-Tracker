@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app import clock
 from app.db import get_db
 from app.errors import UserError
-from app.models import ShiftSchedule, ShopHours, StaffUser
+from app.models import Machine, ShiftSchedule, ShopHours, StaffUser
 from app.services import audit, backup, pdfs, qr, reports, retention, shopconfig, staffauth
 from app.services import settings as shop_settings
 from app.web import get_form, render, staff_actor, staff_dep
@@ -62,7 +62,46 @@ def export_csv(table: str, user: StaffUser = Depends(monitor), db: Session = Dep
 # ---------------------------------------------------------------- QR codes
 @router.get("/qr")
 def qr_page(request: Request, user: StaffUser = Depends(monitor), db: Session = Depends(get_db)):
-    return render(request, "admin/qr.html", {"flows": [(k, lbl, hint, qr.url_for(path)) for k, lbl, hint, path in qr.FLOWS]})
+    machines = db.scalars(select(Machine).where(Machine.active.is_(True)).order_by(Machine.name)).all()
+    mq = [(m, qr.url_for(qr.machine_path(db, m))) for m in machines]
+    db.commit()
+    return render(request, "admin/qr.html", {"flows": [(k, lbl, hint, qr.url_for(path)) for k, lbl, hint, path in qr.FLOWS],
+                                             "machines": mq, "msg": request.query_params.get("msg")})
+
+
+@router.get("/qr/machine/{mid}.png")
+def machine_qr_png(mid: int, download: int = 0, user: StaffUser = Depends(monitor), db: Session = Depends(get_db)):
+    m = db.get(Machine, mid)
+    if m is None:
+        raise HTTPException(404, "Unknown machine.")
+    data = qr.png_for_path(qr.machine_path(db, m), 20)
+    db.commit()
+    headers = {"Content-Disposition": f'attachment; filename="qr-{m.id}.png"'} if download else {}
+    return Response(data, media_type="image/png", headers=headers)
+
+
+@router.get("/qr/machine/{mid}.pdf")
+def machine_qr_poster(mid: int, user: StaffUser = Depends(monitor), db: Session = Depends(get_db)):
+    m = db.get(Machine, mid)
+    if m is None:
+        raise HTTPException(404, "Unknown machine.")
+    path = qr.machine_path(db, m)
+    db.commit()
+    return Response(pdfs.machine_qr_poster_pdf(m.name, qr.png_for_path(path, 20), qr.url_for(path)), media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="qr-machine-{m.id}.pdf"'})
+
+
+@router.post("/qr-reset/{mid}")
+def machine_qr_reset(mid: int, user: StaffUser = Depends(admin_only), db: Session = Depends(get_db)):
+    """Issue a new code if a machine's printed QR leaked (the old printed code stops working)."""
+    import secrets
+    m = db.get(Machine, mid)
+    if m is None:
+        raise HTTPException(404, "Unknown machine.")
+    m.qr_token = secrets.token_urlsafe(12)
+    audit.record(db, staff_actor(user), "machine.qr_reset", "machine", m.id)
+    db.commit()
+    return RedirectResponse("/admin/qr?msg=New+code+issued.+Reprint+it+for+" + m.name.replace(" ", "+"), status_code=303)
 
 
 @router.get("/qr/print.pdf")

@@ -31,6 +31,7 @@ DEFAULTS: dict[str, object] = {
     "noshow_threshold": 3,
     "noshow_window_days": 30,
     "suspension_days": 14,
+    "max_suspension_days": 30,  # no suspension is ever longer than this (and none is permanent)
     "rotating_code_interval_min": 10,
     "rotating_code_overlap_min": 2,
     "waitlist_claim_minutes": 30,
@@ -40,6 +41,7 @@ DEFAULTS: dict[str, object] = {
     "tv_show_phone": True,
     "require_phone_to_reserve": False,  # phone numbers are optional by default
     "public_schedule_show_phone": True,  # the schedule page needs no login; untick to hide numbers from non-students  # numbers of the current user / next booking shown on the shop TV
+    "machine_qr_checkin": True,  # machine QR codes pre-select the machine on the check-in page (TV code still required)
     "require_shift_clockin": True,  # supervisors must clock in (shop code) to count as on duty
     "require_supervisor_checkin": True,  # a supervisor must approve each student check-in
     "supervisor_checkin_wait_minutes": 20,  # a waiting request expires after this long
@@ -74,9 +76,10 @@ SETTING_META: list[tuple[str, str, str]] = [
     ("checkin_early_minutes", "int", "Check-in allowed this many minutes early"),
     ("checkin_grace_minutes", "int", "Late grace before No-Show (minutes)"),
     ("autoclose_buffer_minutes", "int", "Auto-close buffer after reservation end (minutes)"),
-    ("noshow_threshold", "int", "No-shows that trigger a suspension"),
-    ("noshow_window_days", "int", "No-show counting window (days)"),
-    ("suspension_days", "int", "Automatic suspension length (days)"),
+    ("noshow_threshold", "int", "Active strikes that trigger a suspension"),
+    ("noshow_window_days", "int", "Strikes expire after (days)"),
+    ("suspension_days", "int", "Suspension length after the final strike (days)"),
+    ("max_suspension_days", "int", "Longest any suspension can ever be (days)"),
     ("rotating_code_interval_min", "int", "Shop code rotation interval (minutes)"),
     ("rotating_code_overlap_min", "int", "Previous shop code stays valid (minutes)"),
     ("waitlist_claim_minutes", "int", "Waitlist claim window (minutes)"),
@@ -86,6 +89,7 @@ SETTING_META: list[tuple[str, str, str]] = [
     ("require_phone_to_reserve", "bool", "Require students to show a contact (phone or email) to reserve"),
     ("public_schedule_show_phone", "bool", "Show contacts (phone/email) on the public (no login) schedule page"),
     ("tv_show_phone", "bool", "Show contacts (phone/email) on the shop TV (current user + next booking)"),
+    ("machine_qr_checkin", "bool", "Machine QR codes open check-in with the machine pre-selected (TV code still required)"),
     ("require_shift_clockin", "bool", "Supervisors must clock in to their shift with the shop TV code"),
     ("require_supervisor_checkin", "bool", "A supervisor must approve each student check-in"),
     ("supervisor_checkin_wait_minutes", "int", "Waiting check-in requests expire after (minutes)"),

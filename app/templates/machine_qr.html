@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_macros.html" import errors, csrf with context %}
+{% from "_contact.html" import contact_fields %}
+{% block title %}{{ m.name }}{% endblock %}
+{% block content %}
+<h1>{{ m.name }}</h1>
+{{ errors(errs) }}
+{% if active %}
+  {% if active.machine_id == m.id %}
+  <div class="success" role="status"><strong>You're checked in</strong> to this machine since {{ active.checked_in_at|localtime }}. Your time ends at {{ active.expected_end_at|localtime }}.</div>
+  <p><a class="btn" href="/checkout">Check out when you're done</a></p>
+  {% else %}
+  <div class="notice">You're currently checked in to <strong>{{ active.machine.name }}</strong>. <a href="/checkout">Check out</a> of it first.</div>
+  {% endif %}
+{% elif waiting and waiting.machine_id == m.id %}
+  <div class="notice" role="status"><strong>Waiting for a supervisor.</strong> <a href="/checkin/done/{{ waiting.id }}">See your request</a></div>
+{% elif not enabled %}
+  <div class="notice">Machine QR check-in is switched off. Use the <a href="/checkin">Check In</a> page with the code on the TV.</div>
+{% elif mine %}
+  <form method="post" action="/m/{{ token }}/checkin" class="card" novalidate>
+    {{ csrf() }}
+    {% if mine|length > 1 %}
+    <label for="ref">Which reservation?</label>
+    <select id="ref" name="ref">{% for r in mine %}<option value="{{ r.ref }}">{{ r.start_at|localtime }} to {{ r.end_at|localtime }} ({{ r.ref }})</option>{% endfor %}</select>
+    {% else %}
+    <input type="hidden" name="ref" value="{{ mine[0].ref }}">
+    <p>Your reservation: <strong>{{ mine[0].start_at|localtime }} to {{ mine[0].end_at|localtime }}</strong> ({{ mine[0].ref }})</p>
+    {% endif %}
+    <label for="sc">Shop code</label>
+    <input id="sc" name="shop_code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" required>
+    <p class="help">The 4-digit code shown on the TV in the shop. It changes every 10 minutes.</p>
+    {{ contact_fields(student, v) }}
+    <button class="block" type="submit">Check in to {{ m.name }}</button>
+  </form>
+{% else %}
+  <div class="notice">We couldn't find a reservation for you on the {{ m.name }} today.</div>
+  <p><a class="btn" href="/reserve">Reserve a time</a> <a class="btn secondary" href="/machine/{{ m.id }}">See this machine's schedule</a></p>
+{% endif %}
+{% endblock %}

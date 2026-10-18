@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app import clock, emailer, security
 from app.db import get_db
 from app.errors import UserError
-from app.models import Reservation, ShopSession, Student
+from app.models import Machine, Reservation, ShopSession, Student
 from app.services import contact, lifecycle, sessions
 from app.services import settings as shop_settings
 from app.web import get_form, public_post_guard, render, student_required
@@ -114,3 +114,53 @@ def checkout_done(sid: int, request: Request, student: Student = Depends(student
     if s is None or s.student_id != student.id:
         raise HTTPException(404, "Not found.")
     return render(request, "checkout_done.html", {"s": s})
+
+
+# ---------------------------------------------------------------- per-machine QR check-in
+def _machine_by_token(db, token):
+    m = db.scalar(select(Machine).where(Machine.qr_token == token, Machine.active.is_(True)))
+    if m is None:
+        raise HTTPException(404, "This QR code isn't valid any more. Ask shop staff.")
+    return m
+
+
+def _qr_ctx(db, m, student, errs=None, v=None):
+    now = clock.now()
+    mine = [r for r in _todays(db, student) if r.machine_id == m.id]
+    from app.services import qr
+    return {"m": m, "token": m.qr_token, "mine": mine, "active": sessions.active_session_for(db, student.id),
+            "waiting": sessions.pending_session_for(db, student.id), "enabled": shop_settings.load(db).machine_qr_checkin,
+            "errs": errs or [], "student": student, "v": v, "now": now, "qr": qr}
+
+
+@router.get("/m/{token}")
+def machine_qr(token: str, request: Request, student: Student = Depends(student_required), db: Session = Depends(get_db)):
+    m = _machine_by_token(db, token)
+    lifecycle.lazy_sweep(db)
+    return render(request, "machine_qr.html", _qr_ctx(db, m, student))
+
+
+@router.post("/m/{token}/checkin")
+def machine_qr_post(token: str, request: Request, bg: BackgroundTasks, form=Depends(get_form),
+                    student: Student = Depends(student_required), db: Session = Depends(get_db)):
+    m = _machine_by_token(db, token)
+    ftoken = form.get("form_token")
+    replay = security.idem_lookup(db, ftoken)
+    if replay:
+        return RedirectResponse(replay, status_code=303)
+    try:
+        if not shop_settings.load(db).machine_qr_checkin:
+            raise UserError("Check-in by machine QR code is switched off. Use the Check In code and the TV code instead.")
+        security.rate_check(db, f"mqr:{student.id}", 30, 600)
+        contact.apply_from_form(db, student, form)
+        s = sessions.check_in(db, student, form.get("ref", ""), form.get("shop_code", ""), security.client_ip(request),
+                              via_machine=m.id)
+        url = f"/checkin/done/{s.id}"
+        security.idem_store(db, ftoken, "checkin", url)
+        db.commit()
+    except UserError as e:
+        (db.commit if e.persist else db.rollback)()
+        return render(request, "machine_qr.html", _qr_ctx(db, m, student, [e.message], dict(form)),
+                      status=429 if e.code == "rate_limited" else 400)
+    bg.add_task(emailer.flush_in_new_session)
+    return RedirectResponse(url, status_code=303)

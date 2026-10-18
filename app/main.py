@@ -147,7 +147,8 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(UserError)
     async def _ue(request, exc: UserError):
-        return web.render(request, "error.html", {"title": "Can't do that", "message": exc.message},
+        return web.render(request, "error.html", {"title": "Can't do that", "message": exc.message,
+                                                  "back_url": web.back_url(request)},
                           status=429 if exc.code == "rate_limited" else 400)
 
     @app.exception_handler(StarletteHTTPException)
@@ -161,7 +162,8 @@ def create_app() -> FastAPI:
             from urllib.parse import urlparse
             ref = urlparse(request.headers.get("referer", ""))
             retry = web.safe_next(ref.path + (f"?{ref.query}" if ref.query else ""), "/") if ref.path else "/"
-        return web.render(request, "error.html", {"title": f"Error {exc.status_code}", "message": msg, "retry_url": retry},
+        return web.render(request, "error.html", {"title": f"Error {exc.status_code}", "message": msg, "retry_url": retry,
+                                                  "back_url": web.back_url(request)},
                           status=exc.status_code)
 
     @app.exception_handler(Exception)

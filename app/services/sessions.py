@@ -31,11 +31,15 @@ def _find_reservation(db: Session, student: Student, ref: str) -> Reservation:
 
 
 # ----------------------------------------------------------------------- check-in
-def check_in(db: Session, student: Student, ref: str, shop_code: str, ip: str, *, now: datetime | None = None) -> ShopSession:
+def check_in(db: Session, student: Student, ref: str, shop_code: str, ip: str, *, now: datetime | None = None,
+             via_machine: int | None = None) -> ShopSession:
+    """via_machine: id of the machine whose QR code was scanned. It only saves choosing the machine; the TV code is still required."""
     now = now or clock.now()
     cfg = shop_settings.load(db)
     r = _find_reservation(db, student, ref)
-    rotcode.verify(db, shop_code, ip, r.ref, now)  # proves physical presence; failures are rate-limited
+    if via_machine is not None and r.machine_id != via_machine:
+        raise UserError(f"Your reservation {r.ref} is for the {r.machine.name}, not this machine.", code="wrong_machine")
+    rotcode.verify(db, shop_code, ip, r.ref, now)  # the TV code proves physical presence (a saved QR image doesn't)
     name = r.machine.name
     if r.status == RES_CHECKED_IN:
         raise UserError(f"You're already checked in to the {name}.", code="already_checked_in")
@@ -56,7 +60,10 @@ def check_in(db: Session, student: Student, ref: str, shop_code: str, ip: str, *
                             code="too_early")
     if now > r.grace_anchor + timedelta(minutes=cfg.checkin_grace_minutes):
         from app.services import lifecycle
-        lifecycle.mark_no_show(db, r, now)
+        res = lifecycle.mark_no_show(db, r, now)
+        if res == "excused":
+            raise UserError(f"The {name} wasn't available when your slot started, so your reservation was cancelled with no "
+                            f"penalty. Please book a new time.", code="excused", persist=True)
         raise UserError(f"You're more than {cfg.checkin_grace_minutes} minutes late, so this reservation was marked "
                         f"as a no-show and the slot was released. Please book a new time.", code="late", persist=True)
     if active_session_for(db, student.id):

@@ -447,12 +447,18 @@ def machine_action(mid: int, action: str, form=Depends(get_form), user: StaffUse
     actor = staff_actor(user)
     try:
         if action == "override":
+            if m.override_status and m.override_by and m.override_by != user.username and not staffauth.can(user, "machines.safety_clear"):
+                raise UserError(f"This hold was placed by {m.override_by}. Only maintenance, a lead supervisor or an admin can "
+                                f"change or lift a safety hold placed by someone else.")
             ms.set_override(db, actor, m, form.get("status"), form.get("reason", ""))
         elif action == "maintenance":
             ms.open_maintenance(db, actor, m, form.get("kind", "issue"), form.get("description", ""), form.get("state", "none"),
                                 _local_dt(form.get("window_start")) if form.get("window_start") else None,
                                 _local_dt(form.get("window_end")) if form.get("window_end") else None)
         elif action == "clear":
+            if not staffauth.can(user, "machines.safety_clear") and not ms.opened_only_by(db, m, user.username):
+                raise UserError("Only maintenance, a lead supervisor or an admin can clear a machine that someone else took "
+                                "out of service or flagged for inspection.")
             ms.clear_machine(db, actor, m, form.get("note", ""))
         else:
             raise HTTPException(404, "Unknown action.")
@@ -470,6 +476,8 @@ def maintenance_close(rid: int, user: StaffUser = Depends(need('machines.status'
     if rec is None:
         raise HTTPException(404, "Record not found.")
     try:
+        if rec.opened_by != user.username and not staffauth.can(user, "machines.safety_clear"):
+            raise UserError(f"This record was opened by {rec.opened_by}. Only maintenance, a lead supervisor or an admin can close it.")
         ms.close_record(db, staff_actor(user), rec)
     except UserError as e:
         db.rollback()
@@ -489,21 +497,26 @@ def students_page(request: Request, q: str = "", user: StaffUser = Depends(monit
 
 @router.get("/students/{sid}")
 def student_detail(sid: int, request: Request, user: StaffUser = Depends(monitor), db: Session = Depends(get_db)):
-    from app.models import Certification, MachineGroup, Project, Reservation, SafetyWaiver, ShopSession, Student
+    from app.models import Certification, MachineGroup, Project, Reservation, SafetyWaiver, ShopSession, Strike, Student
     from app.services import settings as shop_settings
+    from app.services import strikes as strikes_svc
     s = db.get(Student, sid)
     if s is None:
         raise HTTPException(404, "Student not found.")
     cfg = shop_settings.load(db)
     return render(request, "admin/student.html", {
-        "s": s, "now": clock.now(), "msg": request.query_params.get("msg"), "machines": projects.active_machines(db),
-        "groups": db.scalars(select(MachineGroup).order_by(MachineGroup.name)).all(),
+        "s": s, "now": clock.now(), "msg": request.query_params.get("msg"),
+        "machines": [x for x in projects.active_machines(db) if staffauth.can_train(db, user, x.id)],
+        "groups": [g for g in db.scalars(select(MachineGroup).order_by(MachineGroup.name)).all()
+                   if staffauth.can_train(db, user, None, g.id)],
         "certs": db.scalars(select(Certification).where(Certification.student_id == sid).order_by(Certification.id.desc())).all(),
         "res": db.scalars(select(Reservation).where(Reservation.student_id == sid).order_by(Reservation.start_at.desc()).limit(50)).all(),
         "sess": db.scalars(select(ShopSession).where(ShopSession.student_id == sid).order_by(ShopSession.id.desc()).limit(50)).all(),
         "projs": db.scalars(select(Project).where(Project.student_id == sid).order_by(Project.id.desc())).all(),
         "waiver": db.scalar(select(SafetyWaiver).where(SafetyWaiver.student_id == sid, SafetyWaiver.version == cfg.waiver_version)),
-        "waivers": db.scalars(select(SafetyWaiver).where(SafetyWaiver.student_id == sid)).all(), "cfg": cfg})
+        "waivers": db.scalars(select(SafetyWaiver).where(SafetyWaiver.student_id == sid)).all(), "cfg": cfg,
+        "strikes": db.scalars(select(Strike).where(Strike.student_id == sid).order_by(Strike.id.desc())).all(),
+        "active_strikes": {x.id for x in strikes_svc.active(db, s)}})
 
 
 @router.post("/students/{sid}/{action}")
@@ -516,15 +529,30 @@ def student_action(sid: int, action: str, form=Depends(get_form), user: StaffUse
         raise HTTPException(404, "Student not found.")
     actor = staff_actor(user)
     require(user, "certs.manage" if action == "cert" else "students.suspend")
+    if action == "suspend":
+        raise HTTPException(404, "Suspensions are automatic now: give a justified strike instead (3 active strikes suspend).")
     try:
         if action == "cert":
             exp = _parse_date_end(form.get("expires_on"))
             target = form.get("target", "")
             kind, _, ident = target.partition(":")
+            mid_ = int(ident) if kind == "m" and ident.isdigit() else None
+            gid_ = int(ident) if kind == "g" and ident.isdigit() else None
+            if not staffauth.can_train(db, user, mid_, gid_):
+                raise UserError("You are not authorized to certify students on that machine. Ask an admin to add it to your "
+                                "training authorization (Staff users).")
             ss.grant_certification(db, s, actor, int(ident) if kind == "m" and ident.isdigit() else None,
                                    int(ident) if kind == "g" and ident.isdigit() else None, exp, form.get("notes", ""))
-        elif action == "suspend":
-            ss.suspend(db, s, actor, int(form.get("days") or 0), form.get("reason", ""))
+        elif action == "strike":
+            from app.services import strikes
+            strikes.give(db, s, actor, form.get("reason", ""))
+        elif action == "void_strike":
+            from app.models import Strike
+            from app.services import strikes
+            st = db.get(Strike, int(form.get("strike_id") or 0))
+            if st is None or st.student_id != s.id:
+                raise UserError("Unknown strike.")
+            strikes.void(db, st, actor, form.get("reason", ""))
         elif action == "unsuspend":
             ss.clear_suspension(db, s, actor, form.get("reason", ""))
         else:
@@ -544,6 +572,8 @@ def cert_revoke(cid: int, user: StaffUser = Depends(need('certs.manage')), db: S
     if c is None:
         raise HTTPException(404, "Certification not found.")
     try:
+        if not staffauth.can_train(db, user, c.machine_id, c.group_id):
+            raise UserError("You are not authorized to manage certifications on that machine.")
         ss.revoke_certification(db, c, staff_actor(user))
     except UserError as e:
         db.rollback()

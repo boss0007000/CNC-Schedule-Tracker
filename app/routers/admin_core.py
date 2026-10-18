@@ -78,8 +78,14 @@ def logout():
 # --- user management (admin only) ----------------------------------------------------
 def _users_ctx(db, errs=None, msg=None):
     rows = db.scalars(select(StaffUser).order_by(StaffUser.username)).all()
-    return {"users": rows, "roles": staffauth.ROLE_ORDER, "info": staffauth.ROLE_INFO, "errs": errs or [], "msg": msg,
-            "roles_of": staffauth.roles_of, "perm_desc": staffauth.PERM_DESCRIPTIONS}
+    from app.models import Machine, MachineGroup, TrainerAuthorization
+    auth: dict[int, tuple[set, set]] = {}
+    for a in db.scalars(select(TrainerAuthorization)):
+        ms_, gs_ = auth.setdefault(a.staff_id, (set(), set()))
+        (ms_ if a.machine_id else gs_).add(a.machine_id or a.group_id)
+    return {"auth": auth, "all_machines": db.scalars(select(Machine).where(Machine.active.is_(True)).order_by(Machine.name)).all(),
+            "all_groups": db.scalars(select(MachineGroup).order_by(MachineGroup.name)).all(), "users": rows, "roles": staffauth.ROLE_ORDER, "info": staffauth.ROLE_INFO, "errs": errs or [], "msg": msg,
+            "roles_of": staffauth.roles_of, "perms_of": staffauth.perms_of, "perm_desc": staffauth.PERM_DESCRIPTIONS}
 
 
 @router.get("/users")
@@ -97,7 +103,7 @@ def users_post(request: Request, form=Depends(get_form), user: StaffUser = Depen
             staffauth.create_user(db, form.get("username", ""), form.get("password", ""), chosen[0] if chosen else "",
                                   form.get("display_name", ""), form.get("email") or None, staff_actor(user), roles=chosen,
                                   email_password=True)
-        elif action in ("deactivate", "activate", "reset_password", "set_roles"):
+        elif action in ("deactivate", "activate", "reset_password", "set_roles", "set_training"):
             target = db.get(StaffUser, int(form.get("id", 0)))
             if target is None:
                 raise UserError("Unknown user.")
@@ -115,6 +121,9 @@ def users_post(request: Request, form=Depends(get_form), user: StaffUser = Depen
             elif action == "activate":
                 target.active = True
                 audit.record(db, staff_actor(user), "staff.activate", "staff_user", target.id)
+            elif action == "set_training":
+                ints = lambda k: [int(x) for x in form.getlist(k) if str(x).isdigit()]  # noqa: E731
+                staffauth.set_training(db, staff_actor(user), target, ints("machines"), ints("groups"))
             elif action == "set_roles":
                 staffauth.set_roles(db, staff_actor(user), target, form.getlist("roles"))
             else:

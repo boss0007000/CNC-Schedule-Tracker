@@ -7,4 +7,12 @@
 {% for key, label, hint, url in flows %}<div class="card"><h2>{{ loop.index }}. {{ label }}</h2><img src="/qr/{{ key }}.png" alt="QR code for {{ label }}" width="220" height="220"><p>{{ hint }}</p><p class="muted">{{ url }}</p>
 <p class="noprint"><a class="btn small secondary" href="/admin/qr/{{ key }}.png">PNG</a> <a class="btn small secondary" href="/admin/qr/{{ key }}.pdf" target="_blank">Poster PDF</a></p></div>{% endfor %}
 </div>
+<h2>Machine check-in codes</h2>
+{% if msg %}<div class="success">{{ msg }}</div>{% endif %}
+<p>Stick one on each machine. A student with a reservation scans it and the check-in page opens with that machine and their reservation already selected. They still type the 4-digit TV code, which proves they are in the shop (a saved photo of this QR code can't check anyone in). A supervisor still approves if that setting is on. Switch this off in Settings (<em>Machine QR codes open check-in with the machine pre-selected</em>).</p>
+<div class="tiles">
+{% for m, url in machines %}<div class="card"><h3>{{ m.name }}</h3><img src="/admin/qr/machine/{{ m.id }}.png" alt="Check-in QR code for {{ m.name }}" width="200" height="200"><p class="muted">{{ url }}</p>
+<p class="noprint"><a class="btn small secondary" href="/admin/qr/machine/{{ m.id }}.png?download=1">PNG</a> <a class="btn small secondary" href="/admin/qr/machine/{{ m.id }}.pdf" target="_blank">Poster PDF</a></p>
+{% if 'admin' in staff.perms %}<form method="post" action="/admin/qr-reset/{{ m.id }}" class="noprint"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small danger" type="submit">Reissue code</button></form>{% endif %}</div>{% endfor %}
+</div>
 {% endblock %}

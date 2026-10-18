@@ -49,3 +49,16 @@ def png(name: str, box_size: int = 10) -> bytes:
         q.make_image(fill_color="black", back_color="white").save(buf, format="PNG")
         _cache[key] = buf.getvalue()
     return _cache[key]
+
+
+def machine_token(db, machine) -> str:
+    """Unguessable per-machine token (so the check-in URL can't be built remotely from a machine id)."""
+    import secrets
+    if not machine.qr_token:
+        machine.qr_token = secrets.token_urlsafe(12)
+        db.flush()
+    return machine.qr_token
+
+
+def machine_path(db, machine) -> str:
+    return f"/m/{machine_token(db, machine)}"

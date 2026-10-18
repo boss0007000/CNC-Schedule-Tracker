@@ -75,6 +75,10 @@ def busy(db, demo):
     sessions.check_out(db, alex, None, rotcode.current(db)["code"],
                        {"machine_cleaned": True, "tools_returned": True, "workstation_clean": True}, "1.1.1.1",
                        report_kind="damage", report_text="Chipped end mill in vise")
+    from app.services import machines as machines_svc
+    machines_svc.clear_machine(db, "staff:sam", machine(db, MM1), "inspected, fine")  # damage flag cleared before the next slots
+    for rec in db.scalars(select(MaintenanceRecord)):
+        rec.closed_at = at(0, 12, 0)
     clock.freeze(at(0, 14, 20))
     from app.services import lifecycle
     lifecycle.sweep(db)

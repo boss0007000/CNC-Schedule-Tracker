@@ -360,7 +360,7 @@ def test_three_no_shows_auto_suspend_and_staff_can_override(db, w):
     for r in rs_:
         no_show(db, r)
     assert w.alex.suspended_until and w.alex.suspended_until > clock.now()
-    assert "3 no-shows" in w.alex.suspension_reason
+    assert "3 strikes" in w.alex.suspension_reason and "Did not check in" in w.alex.suspension_reason
     emailer.flush_outbox(db)
     assert any("paused" in m["text"] for m in emailer.SENT)
     with pytest.raises(UserError) as e:

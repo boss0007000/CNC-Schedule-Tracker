@@ -218,11 +218,15 @@ def test_cert_expiry_must_be_future(sup, db):
     assert db.scalar(select(Certification).where(Certification.student_id == s.id)) is None
 
 
-def test_manual_suspension_and_lift(sup, db):
+def test_strikes_suspend_only_at_three_and_lift(sup, db):
     s = student(db, "riley")
-    post(sup, f"/admin/students/{s.id}/suspend", days="7", reason="unsafe behaviour")
-    db.expire_all()
+    for i, why in enumerate(("ran the spindle without the guard closed", "left the mill coolant running overnight",
+                             "used a machine they were not approved on")):
+        assert student(db, "riley").suspended_until is None
+        post(sup, f"/admin/students/{s.id}/strike", reason=why)
+        db.expire_all()
     assert student(db, "riley").suspended_until > clock.now()
+    assert (student(db, "riley").suspended_until - clock.now()).days <= 30
     post(sup, f"/admin/students/{s.id}/unsuspend", reason="resolved with student")
     db.expire_all()
     assert student(db, "riley").suspended_until is None

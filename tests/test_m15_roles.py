@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.main import create_app
 from app.models import AuditLog, StaffUser
 from app.services import staffauth
+from tests.factories import student
 from tests.helpers import csrf, staff_login
 from tests.test_m9_hardening import concrete, routes
 
@@ -245,3 +246,118 @@ def test_missing_clock_in_alerts_admins_once_and_dashboard_form_works(client, db
         assert m.post("/admin/shift/clock-in", data={"csrf_token": tok, "code": "1234"}).status_code == 403
     finally:
         m.__exit__(None, None, None)
+
+
+def test_403_page_go_back_is_a_real_link(client, demo):
+    c, tok = login_as("mo")
+    try:
+        r = c.post("/admin/emergency", data={"csrf_token": tok}, headers={"referer": "http://testserver/admin/machines"})
+        assert r.status_code == 403
+        assert 'href="/admin/machines"' in r.text and "javascript:" not in r.text
+        r = c.post("/admin/emergency", data={"csrf_token": tok})
+        assert 'href="/admin"' in r.text
+    finally:
+        c.__exit__(None, None, None)
+
+
+# ---------------------------------------------------------------- safety holds
+def _mach(db, name):
+    from tests.factories import machine
+    return machine(db, name)
+
+
+def test_scheduler_cannot_touch_any_safety_hold(client, db, demo):
+    m = _mach(db, "Haas Mini Mill 1")
+    c, tok = login_as("sky")
+    try:
+        for path, data in ((f"/admin/machines/{m.id}/override", {"status": "available", "reason": "x y z"}),
+                           (f"/admin/machines/{m.id}/maintenance", {"kind": "issue", "description": "abc", "state": "none"}),
+                           (f"/admin/machines/{m.id}/clear", {}),
+                           ("/admin/maintenance/1/close", {}), ("/admin/holds/1/release", {}),
+                           (f"/admin/hold-place/{m.id}", {}), ("/admin/emergency", {"action": "reopen"}),
+                           ("/admin/damage/1/status", {})):
+            assert c.post(path, data={"csrf_token": tok, **data}).status_code == 403, path
+    finally:
+        c.__exit__(None, None, None)
+
+
+def test_floor_supervisor_cannot_lift_a_maintenance_hold_but_maintenance_can(client, db, demo):
+    from app.models import Machine
+    m = _mach(db, "Haas Mini Mill 1")
+    mx, tx = login_as("max")
+    fr, tf = login_as("fran")
+    try:
+        mx.post(f"/admin/machines/{m.id}/maintenance", data={"csrf_token": tx, "kind": "issue", "description": "spindle noise",
+                                                              "state": "under_maintenance"})
+        mx.post(f"/admin/machines/{m.id}/override", data={"csrf_token": tx, "status": "under_maintenance", "reason": "spindle noise"})
+        db.expire_all()
+        assert db.get(Machine, m.id).maintenance_state == "under_maintenance" and db.get(Machine, m.id).override_by == "max"
+        fr.post(f"/admin/machines/{m.id}/clear", data={"csrf_token": tf, "note": "looks fine"})
+        fr.post(f"/admin/machines/{m.id}/override", data={"csrf_token": tf, "status": "", "reason": ""})
+        db.expire_all()
+        mm = db.get(Machine, m.id)
+        assert mm.maintenance_state == "under_maintenance" and mm.override_status == "under_maintenance"
+        mx.post(f"/admin/machines/{m.id}/override", data={"csrf_token": tx, "status": "", "reason": ""})
+        mx.post(f"/admin/machines/{m.id}/clear", data={"csrf_token": tx, "note": "fixed"})
+        db.expire_all()
+        mm = db.get(Machine, m.id)
+        assert mm.maintenance_state == "none" and mm.override_status is None
+        # a floor supervisor can place a hold and lift their own
+        fr.post(f"/admin/machines/{m.id}/override", data={"csrf_token": tf, "status": "on_hold", "reason": "coolant spill"})
+        fr.post(f"/admin/machines/{m.id}/override", data={"csrf_token": tf, "status": "", "reason": ""})
+        db.expire_all()
+        assert db.get(Machine, m.id).override_status is None
+    finally:
+        mx.__exit__(None, None, None)
+        fr.__exit__(None, None, None)
+
+
+# ---------------------------------------------------------------- machine-specific training authorization
+def test_trainer_can_only_certify_on_authorized_machines(client, db, demo):
+    from app.models import Certification, Machine
+    alex = student(db, "alex")
+    m1, vf3 = _mach(db, "Haas Mini Mill 1"), _mach(db, "Haas VF-3")
+    for old in db.scalars(select(Certification).where(Certification.student_id == alex.id)).all():
+        db.delete(old)
+    db.commit()
+    t, tt = login_as("tara")
+    adm_tok = staff_login(client, "admin")
+    tara = db.scalar(select(StaffUser).where(StaffUser.username == "tara"))
+
+    def grant(target):
+        t.post(f"/admin/students/{alex.id}/cert", data={"csrf_token": tt, "target": target})
+        db.expire_all()
+        return db.scalars(select(Certification).where(Certification.student_id == alex.id)).all()
+
+    try:
+        assert grant(f"m:{m1.id}") == []  # no authorization yet
+        client.post("/admin/users", data={"csrf_token": adm_tok, "action": "set_training", "id": tara.id, "machines": [m1.id]})
+        assert [c.machine_id for c in grant(f"m:{m1.id}")] == [m1.id]
+        assert [c.machine_id for c in grant(f"m:{vf3.id}")] == [m1.id]  # still not allowed on the VF-3
+        # a group authorization covers every machine in that group
+        grp = db.get(Machine, vf3.id).group_id
+        client.post("/admin/users", data={"csrf_token": adm_tok, "action": "set_training", "id": tara.id, "groups": [grp]})
+        assert vf3.id in [c.machine_id for c in grant(f"m:{vf3.id}")]
+        # revoking outside the scope is refused
+        client.post("/admin/users", data={"csrf_token": adm_tok, "action": "set_training", "id": tara.id, "machines": []})
+        cert = db.scalars(select(Certification).where(Certification.student_id == alex.id)).first()
+        t.post(f"/admin/certs/{cert.id}/revoke", data={"csrf_token": tt})
+        db.expire_all()
+        assert db.get(Certification, cert.id).revoked_at is None
+        # the student page offers no targets
+        assert "not authorized to certify" in t.get(f"/admin/students/{alex.id}").text
+    finally:
+        t.__exit__(None, None, None)
+
+
+def test_lead_supervisor_and_admin_can_certify_anywhere(client, db, demo):
+    from app.models import Certification
+    alex = student(db, "alex")
+    vf3 = _mach(db, "Haas VF-3")
+    c, tok = login_as("sam")
+    try:
+        c.post(f"/admin/students/{alex.id}/cert", data={"csrf_token": tok, "target": f"m:{vf3.id}"})
+        db.expire_all()
+        assert db.scalars(select(Certification).where(Certification.student_id == alex.id)).all()
+    finally:
+        c.__exit__(None, None, None)

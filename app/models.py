@@ -152,6 +152,20 @@ class StaffUser(Base):
     must_change_password: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
 
 
+class TrainerAuthorization(Base):
+    """Which machines (or whole machine groups) a trainer may certify students on."""
+    __tablename__ = "trainer_authorizations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    staff_id: Mapped[int] = mapped_column(ForeignKey("staff_users.id", ondelete="CASCADE"), index=True)
+    machine_id: Mapped[int | None] = mapped_column(ForeignKey("machines.id", ondelete="CASCADE"))
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("machine_groups.id", ondelete="CASCADE"))
+    granted_by: Mapped[str] = mapped_column(String(60))
+    granted_at: Mapped[datetime] = mapped_column(default=_now)
+    __table_args__ = (CheckConstraint("(machine_id is null) <> (group_id is null)", name="ck_trainer_auth_target"),
+                      UniqueConstraint("staff_id", "machine_id", name="uq_trainer_auth_machine"),
+                      UniqueConstraint("staff_id", "group_id", name="uq_trainer_auth_group"))
+
+
 class MachineGroup(Base):
     __tablename__ = "machine_groups"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -172,6 +186,7 @@ class Machine(Base):
     # submit parts for it (staff run it)
     access_level: Mapped[str] = mapped_column(String(20), default="standard", server_default="standard")
     active: Mapped[bool] = mapped_column(default=True)  # inactive = hidden / retired
+    qr_token: Mapped[str | None] = mapped_column(String(24), unique=True, index=True)  # printed on the machine's QR code
     # 'none' | 'awaiting_inspection' | 'under_maintenance'
     maintenance_state: Mapped[str] = mapped_column(String(30), default="none")
     override_status: Mapped[str | None] = mapped_column(String(30))
@@ -395,6 +410,22 @@ class Certification(Base):
     machine: Mapped[Machine | None] = relationship()
     group: Mapped[MachineGroup | None] = relationship()
     __table_args__ = (CheckConstraint("(machine_id is null) <> (group_id is null)", name="ck_cert_target"),)
+
+
+class Strike(Base):
+    """A justified mark against a student. Three active strikes trigger a time-limited suspension."""
+    __tablename__ = "strikes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # no_show | staff
+    reason: Mapped[str] = mapped_column(String(500))
+    reservation_id: Mapped[int | None] = mapped_column(ForeignKey("reservations.id"))
+    issued_by: Mapped[str] = mapped_column(String(80))
+    issued_at: Mapped[datetime] = mapped_column(default=_now)
+    voided_at: Mapped[datetime | None]
+    voided_by: Mapped[str | None] = mapped_column(String(80))
+    void_reason: Mapped[str | None] = mapped_column(String(500))
+    student: Mapped[Student] = relationship()
 
 
 class SafetyWaiver(Base):

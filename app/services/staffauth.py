@@ -22,29 +22,31 @@ PERM_DESCRIPTIONS = {
     "checkins.decide": "Approve or deny student check-ins",
     "sessions.force": "Force check-in/out, adjust or close sessions, review auto-closed sessions",
     "incidents.write": "Record incidents and update damage reports",
-    "machines.status": "Override machine status, log maintenance, clear inspections, place/release holds",
+    "machines.status": "Place machine holds and maintenance, release holds you placed yourself",
+    "machines.safety_clear": "Lift safety holds placed by someone else: maintenance/inspection holds and status overrides",
+    "training.any": "Certify students on ANY machine (otherwise trainers only certify on machines they are authorized for)",
     "emergency": "Emergency close and reopen the shop",
     "projects.review": "Approve, reject or send back projects/parts; revoke approvals",
     "certs.manage": "Grant and revoke certifications",
     "access.approved": "Add/remove students on the Approved list",
     "access.super": "Add/remove students on the Super approved list",
-    "students.suspend": "Suspend and unsuspend booking",
+    "students.suspend": "Give justified strikes (3 active = a time-limited suspension), void strikes, lift suspensions",
     "reservations.manage": "Create, edit, cancel, release reservations and edit booked times",
     "admin": "Users, settings, machines, access grid, backups, audit log, sensitive exports",
 }
-_OPS = {"view", "checkins.decide", "sessions.force", "incidents.write", "machines.status", "emergency", "projects.review",
-        "certs.manage", "access.approved", "students.suspend", "reservations.manage"}
+_OPS = {"view", "checkins.decide", "sessions.force", "incidents.write", "machines.status", "machines.safety_clear", "training.any", "emergency",
+        "projects.review", "certs.manage", "access.approved", "students.suspend", "reservations.manage"}
 ROLE_INFO: dict[str, tuple[str, str, set[str]]] = {
     "monitor": ("Monitor", "Read-only: can look at everything, change nothing.", {"view"}),
     "maintenance": ("Maintenance", "Keeps machines running: maintenance log, repairs, inspection clearance, damage reports.",
-                    {"view", "machines.status", "incidents.write"}),
+                    {"view", "machines.status", "machines.safety_clear", "incidents.write"}),
     "scheduler": ("Scheduler", "Runs the booking calendar: create, edit and cancel reservations.", {"view", "reservations.manage"}),
-    "trainer": ("Trainer", "Signs people off: certifications and the Approved student list.",
+    "trainer": ("Trainer", "Signs people off, only on the machines an admin has authorized them for, plus the Approved student list.",
                 {"view", "certs.manage", "access.approved"}),
     "part_reviewer": ("Part reviewer", "Reviews projects and parts: approve, reject, request changes, revoke approvals.",
                       {"view", "projects.review"}),
     "floor_supervisor": ("Floor supervisor (safety)", "On the shop floor making sure people work safely: approves check-ins, "
-                         "forces check-in/out, incidents, machine status and holds, emergency close, suspensions.",
+                         "forces check-in/out, incidents, places holds (cannot lift maintenance holds), emergency close, suspensions.",
                          {"view", "checkins.decide", "sessions.force", "incidents.write", "machines.status", "emergency",
                           "students.suspend"}),
     "supervisor": ("Lead supervisor", "Everything operational (all of the above), but not users, settings or the audit log.",
@@ -215,3 +217,46 @@ def change_own_password(db: Session, u: StaffUser, current: str, new: str, confi
     if security.verify_password(u.password_hash, new):
         raise UserError("Choose a new password that is different from the temporary one.", field="password")
     set_password(db, u, new, f"staff:{u.username}")
+
+
+# --- machine-specific training authorization ----------------------------------------------------
+def training_scope(db: Session, user: StaffUser) -> tuple[bool, set[int], set[int]]:
+    """(unrestricted, machine_ids, group_ids) this person may certify students on."""
+    from app.models import TrainerAuthorization
+    if can(user, "training.any"):
+        return True, set(), set()
+    rows = db.scalars(select(TrainerAuthorization).where(TrainerAuthorization.staff_id == user.id)).all()
+    return False, {r.machine_id for r in rows if r.machine_id}, {r.group_id for r in rows if r.group_id}
+
+
+def can_train(db: Session, user: StaffUser, machine_id: int | None = None, group_id: int | None = None) -> bool:
+    from app.models import Machine
+    if not can(user, "certs.manage"):
+        return False
+    free, ms, gs = training_scope(db, user)
+    if free:
+        return True
+    if group_id:
+        return group_id in gs
+    if machine_id:
+        m = db.get(Machine, machine_id)
+        return machine_id in ms or bool(m and m.group_id and m.group_id in gs)
+    return False
+
+
+def set_training(db: Session, actor: str, target: StaffUser, machine_ids: list[int], group_ids: list[int]) -> None:
+    from app.models import Machine, MachineGroup, TrainerAuthorization
+    machine_ids = {i for i in machine_ids if db.get(Machine, i)}
+    group_ids = {i for i in group_ids if db.get(MachineGroup, i)}
+    before = training_scope(db, target)
+    for row in db.scalars(select(TrainerAuthorization).where(TrainerAuthorization.staff_id == target.id)):
+        db.delete(row)
+    db.flush()
+    who = actor.split(":", 1)[-1]
+    for i in sorted(machine_ids):
+        db.add(TrainerAuthorization(staff_id=target.id, machine_id=i, granted_by=who))
+    for i in sorted(group_ids):
+        db.add(TrainerAuthorization(staff_id=target.id, group_id=i, granted_by=who))
+    audit.record(db, actor, "staff.training_authorization", "staff_user", target.id,
+                 before={"machines": sorted(before[1]), "groups": sorted(before[2])},
+                 after={"machines": sorted(machine_ids), "groups": sorted(group_ids)})

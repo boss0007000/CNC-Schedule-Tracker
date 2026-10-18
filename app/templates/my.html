@@ -6,6 +6,8 @@
 {% if msg %}<div class="notice" role="status">{{ msg }}</div>{% endif %}
 {% if joined %}<div class="success">You're on the waiting list. We'll email you if the slot opens.</div>{% endif %}
 {% if suspended %}<div class="errors">Booking is paused until {{ student.suspended_until|local }}. {{ student.suspension_reason or '' }}</div>{% endif %}
+{% if strikes %}<div class="notice"><strong>You have {{ strikes|length }} of {{ strike_limit }} strikes.</strong> At {{ strike_limit }}, booking is paused for a short time. They expire on their own; if one looks wrong, talk to shop staff.
+<ul>{% for x in strikes %}<li>{{ x.issued_at|localdate }}: {{ x.reason }}</li>{% endfor %}</ul></div>{% endif %}
 {% if my_holds or recent_machines %}<h2>Things you've left in machines</h2>
 {% for h in my_holds %}<div class="card"><strong>{{ h.machine.name }}</strong>: your {{ 'setup' if h.kind == 'setup' else 'tools' }} {{ 'is' if h.kind == 'setup' else 'are' }} marked do-not-touch until {{ h.expires_at|local }}.
 <form class="inline" method="post" action="/hold/{{ h.id }}/release"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small">I've cleared it out</button></form></div>{% endfor %}

@@ -183,6 +183,21 @@ def require(user: StaffUser, perm: str) -> None:
         raise HTTPException(403, "Your role does not allow this action.")
 
 
+def back_url(request: Request) -> str:
+    """Where a 'Go back' button should lead. The CSP forbids javascript: links, so use the same-site Referer
+    (skipping the page that just errored); fall back to the admin home for /admin pages, else the home page."""
+    from urllib.parse import urlparse
+    ref = urlparse(request.headers.get("referer", ""))
+    host = request.headers.get("host", "")
+    fallback = "/admin" if request.url.path.startswith("/admin") else "/"
+    if ref.path and ref.netloc == host:
+        target = ref.path + (f"?{ref.query}" if ref.query else "")
+        here = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        if target != here:
+            return safe_next(target, fallback)
+    return fallback
+
+
 def staff_actor(user: StaffUser) -> str:
     return f"staff:{user.username}"
 

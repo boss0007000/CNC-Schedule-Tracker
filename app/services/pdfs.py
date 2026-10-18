@@ -87,3 +87,23 @@ def qr_poster_pdf(name: str) -> bytes:
     c.drawCentredString(w / 2, h - 9.2 * inch, qr.url_for(f[3]))
     c.save()
     return buf.getvalue()
+
+
+def machine_qr_poster_pdf(machine_name: str, png: bytes, url: str) -> bytes:
+    """One page for taping beside a machine."""
+    from reportlab.lib.utils import ImageReader
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=letter)
+    w, h = letter
+    c.setFont("Helvetica-Bold", 40)
+    c.drawCentredString(w / 2, h - 1.2 * inch, machine_name)
+    c.setFont("Helvetica-Bold", 26)
+    c.drawCentredString(w / 2, h - 1.8 * inch, "Scan to check in")
+    c.drawImage(ImageReader(io.BytesIO(png)), (w - 5.5 * inch) / 2, h - 7.6 * inch, 5.5 * inch, 5.5 * inch)
+    c.setFont("Helvetica", 16)
+    c.drawCentredString(w / 2, h - 8.3 * inch, "Reserved this machine? Scan, enter the TV code, and tap Check in.")
+    c.drawCentredString(w / 2, h - 8.7 * inch, "No reservation? Book one first at the Reserve a Machine code.")
+    c.setFont("Helvetica-Oblique", 9)
+    c.drawCentredString(w / 2, 0.6 * inch, url)
+    c.save()
+    return buf.getvalue()

@@ -10,20 +10,8 @@ from app.models import Certification, Machine, MachineGroup, Student
 from app.services import audit
 
 
-def suspend(db: Session, student: Student, actor: str, days: int, reason: str) -> None:
-    if days < 1 or days > 365:
-        raise UserError("Suspension must be between 1 and 365 days.")
-    if not reason.strip():
-        raise UserError("A reason is required.")
-    before = {"until": student.suspended_until, "reason": student.suspension_reason}
-    student.suspended_until = clock.now() + timedelta(days=days)
-    student.suspension_reason = reason.strip()[:255]
-    audit.record(db, actor, "student.suspend", "student", student.id, before,
-                 {"until": student.suspended_until, "reason": student.suspension_reason})
-
-
 def clear_suspension(db: Session, student: Student, actor: str, reason: str) -> None:
-    """Lift a suspension and forgive earlier no-shows so the auto-suspend counter restarts."""
+    """Lift a suspension and forgive earlier strikes so the counter restarts."""
     if not reason.strip():
         raise UserError("A reason is required.")
     before = {"until": student.suspended_until, "reason": student.suspension_reason}

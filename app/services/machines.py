@@ -121,6 +121,14 @@ def clear_machine(db: Session, actor: str, machine: Machine, note: str = "") -> 
     return n
 
 
+def opened_only_by(db: Session, machine: Machine, username: str) -> bool:
+    """True if every open (non-scheduled) maintenance record on the machine was opened by `username`."""
+    recs = db.scalars(select(MaintenanceRecord).where(MaintenanceRecord.machine_id == machine.id,
+                                                      MaintenanceRecord.closed_at.is_(None),
+                                                      MaintenanceRecord.kind != "scheduled")).all()
+    return all(r.opened_by == username for r in recs)
+
+
 def close_record(db: Session, actor: str, rec: MaintenanceRecord) -> None:
     if rec.closed_at:
         raise UserError("That record is already closed.")

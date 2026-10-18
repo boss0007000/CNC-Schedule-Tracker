@@ -17,6 +17,12 @@
 <details><summary>Edit roles</summary><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}"><input type="hidden" name="action" value="set_roles">
 {% for r in roles %}<div class="check"><label><input type="checkbox" name="roles" value="{{ r }}" {% if r in roles_of(u) %}checked{% endif %}><span>{{ info[r][0] }}</span></label></div>{% endfor %}
 <button class="small">Save roles</button></form></details>
+{% if 'certs.manage' in perms_of(u) and 'training.any' not in perms_of(u) %}{% set a = auth.get(u.id, ([], [])) %}
+<details><summary>Can train on ({{ a[0]|length + a[1]|length }})</summary><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}"><input type="hidden" name="action" value="set_training">
+<p class="help">This trainer can only certify students on the machines ticked here (a group covers every machine in it).</p>
+{% for g in all_groups %}<div class="check"><label><input type="checkbox" name="groups" value="{{ g.id }}" {% if g.id in a[1] %}checked{% endif %}><span>Group: {{ g.name }}</span></label></div>{% endfor %}
+{% for m in all_machines %}<div class="check"><label><input type="checkbox" name="machines" value="{{ m.id }}" {% if m.id in a[0] %}checked{% endif %}><span>{{ m.name }}</span></label></div>{% endfor %}
+<button class="small">Save training authorization</button></form></details>{% endif %}
 <form class="inline" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}">
 {% if u.active %}<button class="small danger" name="action" value="deactivate">Disable</button>{% else %}<button class="small" name="action" value="activate">Enable</button>{% endif %}</form>
 <form class="inline" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}">

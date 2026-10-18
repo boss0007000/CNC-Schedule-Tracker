@@ -123,12 +123,28 @@ def waitlist_offer(db: Session, student: Student, machine_name: str, start, end,
                   f"{get_config().base_url}/waitlist/claim/{token}\n\n— {_shop(db)}")
 
 
+def strike(db: Session, student, s, active: int, threshold: int, suspended_until=None) -> None:
+    extra = (f"\n\nThis was strike {active} of {threshold}, so your booking privileges are paused until {_fmt(suspended_until)}. "
+             f"The pause always ends on its own." if suspended_until else
+             f"\n\nThis is strike {active} of {threshold}. At {threshold} active strikes booking is paused for a limited time. "
+             f"Strikes expire on their own.")
+    emailer.queue(db, student.email, "A strike was recorded on your shop account",
+                  f"Hi {student.first_name},\n\nA staff member recorded a strike:\n\"{s.reason}\"{extra}\n\nIf you think this is a "
+                  f"mistake, talk to shop staff; they can review and remove it.\n\n— {_shop(db)}")
+
+
 def no_show(db: Session, r: Reservation, suspended_until=None) -> None:
-    extra = (f"\n\nBecause of repeated no-shows your booking privileges are paused until {_fmt(suspended_until)}. "
-             f"Contact shop staff if you think this is a mistake.") if suspended_until else ""
+    extra = (f"\n\nBecause this was your third strike, your booking privileges are paused until {_fmt(suspended_until)}. "
+             f"The pause ends on its own. Contact shop staff if you think this is a mistake.") if suspended_until else ""
     emailer.queue(db, r.student.email, f"No-show recorded: {r.ref}",
                   f"Hi {r.student.first_name},\n\nYou didn't check in for {r.machine.name} ({_fmt(r.start_at)}), so the slot "
                   f"was released for others.{extra}\n\n— {_shop(db)}")
+
+
+def reservation_excused(db: Session, r: Reservation, why: str) -> None:
+    emailer.queue(db, r.student.email, f"Your {r.machine.name} reservation was cancelled (no penalty)",
+                  f"Hi {r.student.first_name},\n\nYour reservation {r.ref} for {r.machine.name} ({_fmt(r.start_at)}) was cancelled "
+                  f"because {why}. Nothing counts against you. You're welcome to book another time: {get_config().base_url}/reserve\n\n— {_shop(db)}")
 
 
 def overdue_warning(db: Session, s) -> None:

@@ -12,6 +12,8 @@ from fastapi.responses import RedirectResponse
 from app.web import get_form
 from app.models import Approval, MachineHold, ShopSession, Project, Reservation, Student, TimeChangeRequest, WaitlistEntry
 from app.services import reservations
+from app.services import settings as shop_settings
+from app.services import strikes as strikes_svc
 from app.web import render, student_required
 
 router = APIRouter()
@@ -46,7 +48,8 @@ def my(request: Request, joined: int = 0, msg: str = "", student: Student = Depe
     usage = {a.id: reservations.approval_usage(db, a) for a in approvals}
     return render(request, "my.html", {"student": student, "projects": projects_, "approvals": approvals,
                                        "upcoming": upcoming, "waits": waits, "usage": usage, "my_holds": my_holds, "recent_machines": recent, "incoming": incoming, "outgoing": outgoing, "joined": bool(joined), "msg": msg,
-                                       "suspended": student.suspended_until and student.suspended_until > now})
+                                       "suspended": student.suspended_until and student.suspended_until > now,
+                                       "strikes": strikes_svc.active(db, student, now), "strike_limit": shop_settings.load(db).noshow_threshold})
 
 
 @router.post("/my/contact")

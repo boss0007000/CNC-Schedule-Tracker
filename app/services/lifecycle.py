@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import clock
-from app.models import RES_CONFIRMED, RES_COMPLETED, RES_NO_SHOW, Reservation, ShopSession, Student
+from app.models import RES_CANCELLED, RES_CHECKED_IN, RES_COMPLETED, RES_CONFIRMED, RES_NO_SHOW, Reservation, ShopSession, Student
 from app.services import audit, holds, notify, reservations, status
 from app.services import settings as shop_settings
 
@@ -20,33 +20,68 @@ def reset_throttle() -> None:
     _last_run = None
 
 
-def mark_no_show(db: Session, r: Reservation, now: datetime) -> None:
-    """Flag a reservation No-Show, release the slot (waitlist), maybe suspend repeat offenders."""
+def _excusal(db: Session, r: Reservation, now: datetime, cfg) -> str | None:
+    """Reasons that are the shop's fault, never the student's: an emergency close or the machine being unusable
+    at any point from the start of the slot until now. Returns a sentence for the student, or None."""
+    from app.models import AuditLog, MaintenanceRecord
+    m = r.machine
+    until = max(now, r.grace_anchor + timedelta(minutes=cfg.checkin_grace_minutes))
+    if cfg.emergency_active or db.scalar(select(AuditLog.id).where(
+            AuditLog.action.in_(("emergency.close", "emergency.reopen")), AuditLog.at >= r.start_at, AuditLog.at <= until).limit(1)):
+        return "the shop was closed unexpectedly (emergency close)"
+    if m.maintenance_state != "none" or m.override_status in ("under_maintenance", "awaiting_inspection", "on_hold"):
+        return f"the {m.name} was out of service"
+    broke = db.scalar(select(MaintenanceRecord.id).where(
+        MaintenanceRecord.machine_id == m.id, MaintenanceRecord.state_set.is_not(None), MaintenanceRecord.opened_at <= until,
+        (MaintenanceRecord.closed_at.is_(None)) | (MaintenanceRecord.closed_at > r.start_at)).limit(1))
+    scheduled = db.scalar(select(MaintenanceRecord.id).where(
+        MaintenanceRecord.machine_id == m.id, MaintenanceRecord.window_start.is_not(None),
+        MaintenanceRecord.window_start < until, MaintenanceRecord.window_end > r.start_at).limit(1))
+    if broke or scheduled:
+        return f"the {m.name} was out of service"
+    return None
+
+
+def mark_no_show(db: Session, r: Reservation, now: datetime) -> str | None:
+    """At the end of the grace period, record a no-show strike only after re-reading the database (a check-in that
+    landed a moment ago must never be penalised) and ruling out the shop's own fault. Returns what happened:
+    "no_show", "excused" (cancelled without penalty), "attended" (they did check in), or None (nothing to do)."""
+    db.refresh(r, with_for_update=True)  # fresh read; waits for a check-in that is mid-flight
     if r.status != RES_CONFIRMED:
-        return
+        return None
     cfg = shop_settings.load(db)
+    sess = db.scalar(select(ShopSession).where(ShopSession.reservation_id == r.id).order_by(ShopSession.id.desc()).limit(1))
+    if sess is not None:  # they did arrive; the reservation status just hadn't caught up
+        if sess.status == "active":
+            r.status = RES_CHECKED_IN
+        elif sess.status in ("closed", "auto_closed", "force_closed"):
+            r.status = RES_COMPLETED
+        audit.record(db, "system", "reservation.reconciled", "reservation", r.id, {"status": RES_CONFIRMED}, {"status": r.status})
+        return "attended"
+    why = _excusal(db, r, now, cfg)
+    if why:
+        r.status, r.cancelled_at, r.cancel_reason = RES_CANCELLED, now, f"excused (no penalty): {why}"
+        audit.record(db, "system", "reservation.excused", "reservation", r.id, {"status": RES_CONFIRMED}, {"reason": why})
+        notify.reservation_excused(db, r, why)
+        if r.end_at > now:
+            reservations.promote_waitlist(db, r.machine_id, max(r.start_at, now), r.end_at, now)
+        return "excused"
     r.status = RES_NO_SHOW
     audit.record(db, "system", "reservation.no_show", "reservation", r.id, {"status": RES_CONFIRMED},
                  {"status": RES_NO_SHOW})
     stu: Student = r.student
-    since = now - timedelta(days=cfg.noshow_window_days)
-    if stu.noshow_forgiven_at:
-        since = max(since, stu.noshow_forgiven_at)
     db.flush()
-    count = db.scalar(select(func.count()).select_from(Reservation).where(
-        Reservation.student_id == stu.id, Reservation.status == RES_NO_SHOW, Reservation.start_at > since)) or 0
-    suspended_until = None
-    if count >= cfg.noshow_threshold and not (stu.suspended_until and stu.suspended_until > now):
-        suspended_until = now + timedelta(days=cfg.suspension_days)
-        stu.suspended_until = suspended_until
-        stu.suspension_reason = f"{count} no-shows in {cfg.noshow_window_days} days"
-        audit.record(db, "system", "student.auto_suspend", "student", stu.id, after={
-            "until": suspended_until, "reason": stu.suspension_reason})
+    from app.services import strikes
+    _, suspended_until = strikes.give(
+        db, stu, "system", f"Did not check in for {r.machine.name} ({reservations.fmt(r.start_at)}, {r.ref}) within "
+                           f"{cfg.checkin_grace_minutes} minutes of the start.",
+        kind="no_show", reservation_id=r.id, now=now, notify_student=False)
     notify.no_show(db, r, suspended_until)
     if r.end_at > now:
         reservations.promote_waitlist(db, r.machine_id, max(r.start_at, now), r.end_at, now)
     from app.services import sessions
     sessions.notify_next_up(db, r.machine_id, now)
+    return "no_show"
 
 
 def sweep(db: Session, now: datetime | None = None) -> dict:
@@ -70,8 +105,11 @@ def sweep(db: Session, now: datetime | None = None) -> dict:
                 audit.record(db, "system", "reservation.unapproved_release", "reservation", r.id)
             continue
         if now > r.grace_anchor + grace:
-            mark_no_show(db, r, now)
-            out["no_shows"] += 1
+            res = mark_no_show(db, r, now)
+            if res == "no_show":
+                out["no_shows"] += 1
+            elif res == "excused":
+                out["excused"] = out.get("excused", 0) + 1
 
     for s in db.scalars(select(ShopSession).where(ShopSession.status == "active", ShopSession.expected_end_at < now)):
         deadline = status.session_deadline(db, s, now)  # later than the booked end if nobody is waiting

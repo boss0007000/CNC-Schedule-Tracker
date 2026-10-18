@@ -1,14 +1,14 @@
 """Data retention: purge old personal data (admin tool). The audit log is never purged."""
 from datetime import timedelta
 
-from sqlalchemy import delete, exists, func, select
+from sqlalchemy import delete, exists, func, select, update
 from sqlalchemy.orm import Session
 
 from app import clock
 from app.models import (
     Approval, ApprovalMachine, ApprovalRestriction, Certification, ConsumableLog, DamageReport, EmailOutbox,
     EmailVerification, FileBlob, IdempotencyKey, IncidentReport, Project, ProjectFile, ProjectRevision, RateEvent,
-    Reservation, SafetyWaiver, ShopSession, Student, WaitlistEntry,
+    Reservation, SafetyWaiver, ShopSession, Strike, Student, WaitlistEntry,
 )
 from app.services import audit, files
 
@@ -45,7 +45,11 @@ def purge(db: Session, days: int, actor: str, dry_run: bool = True, include_inci
     still_referenced = select(ShopSession.reservation_id).where(ShopSession.reservation_id.is_not(None))
     old_res = (Reservation.end_at < cutoff, Reservation.status.in_(("completed", "cancelled", "no_show", "confirmed")),
                Reservation.id.not_in(still_referenced))
-    run("reservations", select(Reservation.id).where(*old_res), lambda: db.execute(delete(Reservation).where(*old_res)))
+    def del_reservations():
+        db.execute(update(Strike).where(Strike.reservation_id.in_(select(Reservation.id).where(*old_res)))
+                   .values(reservation_id=None))  # strikes keep their written reason after the booking is purged
+        db.execute(delete(Reservation).where(*old_res))
+    run("reservations", select(Reservation.id).where(*old_res), del_reservations)
 
     old_appr = (Approval.expires_at < cutoff,
                 ~exists().where(Reservation.approval_id == Approval.id),
@@ -89,6 +93,7 @@ def purge(db: Session, days: int, actor: str, dry_run: bool = True, include_inci
         if n:
             db.execute(delete(Certification).where(Certification.student_id.in_(ids)))
             db.execute(delete(SafetyWaiver).where(SafetyWaiver.student_id.in_(ids)))
+            db.execute(delete(Strike).where(Strike.student_id.in_(ids)))
             db.execute(delete(EmailVerification).where(EmailVerification.email.in_(select(Student.email).where(Student.id.in_(ids)))))
             db.execute(delete(Student).where(Student.id.in_(ids)))
 

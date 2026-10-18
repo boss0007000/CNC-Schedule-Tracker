@@ -1,6 +1,9 @@
 # Staff quick-start
 
 **Admin site:** `https://<your-site>/admin` — log in with your own username (never share logins).
+## Machine QR codes
+Admin > QR codes lists a check-in QR code for every machine (PNG or one-page poster PDF). Tape it on the machine. A student who reserved it scans it with their phone camera; the check-in page opens with the machine and reservation already selected. They still enter the 4-digit TV code (that is what proves they are in the shop, so a saved photo of the QR code can't check anyone in) and tap **Check in**. A supervisor still approves if that is switched on. Setting: *Machine QR codes open check-in with the machine pre-selected*.
+
 ## Clocking in to a shift
 Being on the schedule is not enough: when your shift starts, open the dashboard, enter the 4-digit code shown on the shop TV (this proves you are in the shop) and press **Clock in**. Only clocked-in supervisors show as "Supervisor" on the TV and receive check-in alerts first. If you haven't clocked in 10 minutes after the shift starts, you and the admins get an email. Press **Clock out** if you leave early. Admins can turn the requirement off in Settings (*Supervisors must clock in*).
 
@@ -17,7 +20,9 @@ Being on the schedule is not enough: when your shift starts, open the dashboard,
 | **Lead supervisor** | All day-to-day operations above |
 | **Admin** | Everything, plus settings, staff accounts, audit log, backups, the "super-approved" list |
 
-New staff receive a temporary password by email and must choose their own at first sign-in (use *Change password* in the top bar any time). A person can hold several roles; their permissions combine. The last active admin can't be removed.
+New staff receive a temporary password by email and must choose their own at first sign-in (use *Change password* in the top bar any time). **Strikes, not suspensions.** Nobody is suspended directly, and no suspension is ever permanent. Staff with the suspension permission give a *strike* and must write a reason (15+ characters) that the student sees and is emailed. Missed reservations also create a strike automatically. Strikes expire after 30 days, and any strike can be voided with a written reason. Three active strikes pause booking for 14 days (capped at 30; settings can change these). **No-shows are checked carefully:** at the 15-minute mark the system re-reads the database for a check-in first, and cancelled reservations, machine breakdowns/maintenance and emergency closures cancel the slot with no strike.
+
+**Safety holds:** anyone with machine-status rights can put a machine on hold or out of service, but only Maintenance, a Lead supervisor or an Admin can lift a hold or close a maintenance record that someone else placed. Schedulers and floor supervisors cannot lift maintenance holds. **Trainers** certify students only on the machines (or machine groups) an admin ticked for them under *Staff users > Can train on*; Lead supervisors and Admins can certify on any machine. A person can hold several roles; their permissions combine. The last active admin can't be removed.
 
 ## Opening the shop
 1. Put the TV on `/tv` (full screen, F11). It shows the 4-digit **shop code**, machine status and the four QR codes.
