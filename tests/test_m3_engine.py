@@ -225,7 +225,8 @@ def test_slot_grid_partial_final_slot_dropped(db, demo):
 
 
 def test_supervisor_on_duty_and_coverage(db, demo):
-    assert shop.supervisor_on_duty(db, NOW).username == "sam"
+    assert shop.supervisor_scheduled(db, NOW).username == "sam"
+    assert shop.supervisor_on_duty(db, NOW) is None  # scheduled, but nobody has clocked in yet
     assert shop.supervisor_covers(db, NOW, NOW + 120 * M)
     saturday = datetime(2026, 3, 7, 18, 0, tzinfo=timezone.utc)
     assert shop.supervisor_on_duty(db, saturday) is None
@@ -233,7 +234,7 @@ def test_supervisor_on_duty_and_coverage(db, demo):
 
 
 def test_supervisor_coverage_across_back_to_back_shifts(db, demo):
-    sam = shop.supervisor_on_duty(db, NOW)
+    sam = shop.supervisor_scheduled(db, NOW)
     t = datetime(2026, 3, 6, 0, 0, tzinfo=timezone.utc)
     db.add_all([ShiftSchedule(staff_id=sam.id, start_at=t + timedelta(days=30), end_at=t + timedelta(days=30, hours=4)),
                 ShiftSchedule(staff_id=sam.id, start_at=t + timedelta(days=30, hours=4), end_at=t + timedelta(days=30, hours=8))])

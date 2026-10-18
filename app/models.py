@@ -149,6 +149,7 @@ class StaffUser(Base):
     session_epoch: Mapped[int] = mapped_column(default=0)  # bump to invalidate sessions
     created_at: Mapped[datetime] = mapped_column(default=_now)
     last_login_at: Mapped[datetime | None]
+    must_change_password: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
 
 
 class MachineGroup(Base):
@@ -480,6 +481,9 @@ class ShiftSchedule(Base):
     staff_id: Mapped[int] = mapped_column(ForeignKey("staff_users.id"))
     start_at: Mapped[datetime]
     end_at: Mapped[datetime]
+    checked_in_at: Mapped[datetime | None]
+    checked_out_at: Mapped[datetime | None]
+    alerted_at: Mapped[datetime | None]  # admins were told nobody clocked in
     staff: Mapped[StaffUser] = relationship()
     __table_args__ = (CheckConstraint("end_at > start_at", name="ck_shift_window"),)
 

@@ -90,6 +90,8 @@ def sweep(db: Session, now: datetime | None = None) -> dict:
             out["auto_closed"] += 1
 
     out["offers_expired"] = reservations.expire_offers(db, now)
+    from app.services import shifts
+    out["shift_alerts"] = shifts.alert_missing(db, now)
     from app.services import sessions as sessions_svc
     out["checkins_expired"] = sessions_svc.expire_pending(db, now)
     out["holds_expired"] = holds.expire_due(db, now)

@@ -17,6 +17,7 @@
       <a href="/admin/checkins">Check-ins</a><a href="/admin/sessions">Sessions</a><a href="/admin/machines">Machines</a><a href="/admin/students">Students</a><a href="/admin/access">Access</a><a href="/admin/requests">Requests</a>
       <a href="/admin/incidents">Incidents</a><a href="/admin/reports">Reports</a><a href="/admin/qr">QR codes</a>
       {% if 'admin' in staff.perms %}<a href="/admin/settings">Settings</a>{% endif %}
+      <a href="/admin/password">Change password</a>
       <form class="inline" method="post" action="/admin/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary" type="submit">Log out ({{ staff.username }})</button></form>
     {% else %}
       <a href="/submit">Submit project</a><a href="/reserve">Reserve</a><a href="/checkin">Check in</a><a href="/checkout">Check out</a><a href="/schedule">Schedules</a><a href="/my">My shop</a>

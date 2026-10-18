@@ -91,6 +91,10 @@ class NeedsStaffLogin(Exception):
         self.next_url = next_url
 
 
+class NeedsPasswordChange(Exception):
+    pass
+
+
 def needs_verification_response(exc: NeedsVerification):
     return RedirectResponse(f"/verify?next={quote(exc.next_url)}", status_code=303)
 
@@ -140,6 +144,8 @@ def _signed_in_staff(request: Request, db: Session) -> StaffUser:
     if user is None:
         path = request.url.path + (f"?{request.url.query}" if request.url.query else "")
         raise NeedsStaffLogin(path)
+    if user.must_change_password:
+        raise NeedsPasswordChange()
     # plain snapshot: error pages render after the DB session is closed
     perms = staffauth.perms_of(user)
     request.state.staff = SimpleNamespace(id=user.id, username=user.username, display_name=user.display_name, role=user.role,

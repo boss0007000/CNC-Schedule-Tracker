@@ -170,7 +170,35 @@ def dashboard(request: Request, user: StaffUser = Depends(monitor), db: Session 
     lifecycle.lazy_sweep(db)
     ov = board.admin_overview(db)
     cfg = shop_settings.load(db)
-    return render(request, "admin/dashboard.html", {**ov, "cfg": cfg, "errs": [], "now": clock.now()})
+    return render(request, "admin/dashboard.html", {**ov, "cfg": cfg, "errs": [], "now": clock.now(),
+                                                    **_shift_ctx(db, user)})
+
+
+def _shift_ctx(db: Session, user: StaffUser) -> dict:
+    from app.services import shifts
+    sh = shifts.my_shift(db, user) if staffauth.can(user, "checkins.decide") else None
+    return {"my_shift": sh, "my_shift_in": bool(sh and sh.checked_in_at and not sh.checked_out_at)}
+
+
+@router.post("/shift/{action}")
+def shift_action(action: str, request: Request, form=Depends(get_form), user: StaffUser = Depends(need("checkins.decide")),
+                 db: Session = Depends(get_db)):
+    from app import security
+    from app.services import board, shifts
+    from app.services import settings as shop_settings
+    try:
+        if action == "clock-in":
+            shifts.clock_in(db, user, form.get("code", ""), security.client_ip(request))
+        elif action == "clock-out":
+            shifts.clock_out(db, user)
+        else:
+            raise HTTPException(404)
+    except UserError as e:
+        db.commit()  # keep failed-code counters
+        return render(request, "admin/dashboard.html", {**board.admin_overview(db), "cfg": shop_settings.load(db),
+                                                        "errs": [e.message], "now": clock.now(), **_shift_ctx(db, user)}, status=400)
+    db.commit()
+    return RedirectResponse("/admin", status_code=303)
 
 
 @router.post("/emergency")

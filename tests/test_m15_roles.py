@@ -21,7 +21,7 @@ def login_as(username):
 
 def admin_posts(app):
     return [r for r in routes(app) if "POST" in r.methods and r.path.startswith("/admin")
-            and r.path not in ("/admin/login", "/admin/logout")]
+            and r.path not in ("/admin/login", "/admin/logout", "/admin/password")]
 
 
 def test_demo_roles_have_expected_permissions(demo, db):
@@ -85,7 +85,7 @@ def test_floor_supervisor_can_use_emergency_stop_but_scheduler_cannot(client, de
 def test_admin_can_assign_multiple_roles_and_union_applies(client, db, demo):
     tok = staff_login(client, "admin")
     r = client.post("/admin/users", data={"csrf_token": tok, "action": "create", "username": "combo",
-                                          "password": "very-long-password", "roles": ["trainer", "part_reviewer"]},
+                                          "email": "combo@example.edu", "roles": ["trainer", "part_reviewer"]},
                     follow_redirects=False)
     assert r.status_code in (200, 303)
     u = db.scalar(select(StaffUser).where(StaffUser.username == "combo"))
@@ -116,3 +116,132 @@ def test_users_page_lists_roles_for_admin(client, demo):
     html = client.get("/admin/users").text
     for label in ("Floor supervisor", "Part reviewer", "Trainer", "Scheduler"):
         assert label.lower() in html.lower()
+
+
+# ---------------------------------------------------------------- emailed temporary password
+def _create(client, tok, **kw):
+    data = {"csrf_token": tok, "action": "create", "username": "newhire", "email": "newhire@example.edu",
+            "roles": ["floor_supervisor"], **kw}
+    return client.post("/admin/users", data=data, follow_redirects=False)
+
+
+def test_new_user_gets_emailed_temp_password_and_must_change_it(client, db, demo):
+    import re
+    from app import emailer
+    emailer.SENT.clear()
+    tok = staff_login(client, "admin")
+    assert _create(client, tok).status_code == 303
+    from app.emailer import flush_outbox
+    flush_outbox(db)
+    db.commit()
+    mail = [m for m in emailer.SENT if m["to"] == "newhire@example.edu"][-1]
+    pw = re.search(r"Temporary password: (\S+)", mail["text"]).group(1)
+    assert len(pw) >= 10 and "/admin/login" in mail["text"]
+    u = db.scalar(select(StaffUser).where(StaffUser.username == "newhire"))
+    assert u.must_change_password
+    # temp password is not kept in the outbox after sending
+    from app.models import EmailOutbox
+    row = db.scalar(select(EmailOutbox).where(EmailOutbox.to_email == "newhire@example.edu"))
+    assert pw not in row.body_text
+
+    c = TestClient(create_app(), base_url="http://testserver")
+    c.__enter__()
+    try:
+        staff_login(c, "newhire", pw)
+        r = c.get("/admin/machines", follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/admin/password"
+        t = c.cookies.get("csrf")
+        assert c.post("/admin/emergency", data={"csrf_token": t}, follow_redirects=False).headers["location"] == "/admin/password"
+        # wrong current password / same password / mismatch are refused
+        for data in ({"current": "nope", "password": "brand-new-pass-1", "confirm": "brand-new-pass-1"},
+                     {"current": pw, "password": pw, "confirm": pw},
+                     {"current": pw, "password": "brand-new-pass-1", "confirm": "different-pass-22"}):
+            assert c.post("/admin/password", data={"csrf_token": t, **data}).status_code == 400
+        r = c.post("/admin/password", data={"csrf_token": t, "current": pw, "password": "brand-new-pass-1",
+                                            "confirm": "brand-new-pass-1"}, follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/admin"
+        assert c.get("/admin/machines", follow_redirects=False).status_code == 200
+    finally:
+        c.__exit__(None, None, None)
+    db.expire_all()
+    assert not db.scalar(select(StaffUser).where(StaffUser.username == "newhire")).must_change_password
+    # the old temporary password no longer works
+    c2 = TestClient(create_app(), base_url="http://testserver")
+    c2.__enter__()
+    try:
+        t2 = csrf(c2, "/admin/login")
+        assert c2.post("/admin/login", data={"csrf_token": t2, "username": "newhire", "password": pw}).status_code == 401
+    finally:
+        c2.__exit__(None, None, None)
+
+
+def test_create_requires_email_and_admin_reset_emails_new_password(client, db, demo):
+    from app import emailer
+    tok = staff_login(client, "admin")
+    r = client.post("/admin/users", data={"csrf_token": tok, "action": "create", "username": "noemail",
+                                          "roles": ["monitor"]})
+    assert r.status_code == 400
+    emailer.SENT.clear()
+    mo = db.scalar(select(StaffUser).where(StaffUser.username == "mo"))
+    client.post("/admin/users", data={"csrf_token": tok, "action": "reset_password", "id": mo.id, "password": ""})
+    from app.emailer import flush_outbox
+    flush_outbox(db)
+    db.commit()
+    db.expire_all()
+    assert db.get(StaffUser, mo.id).must_change_password
+    assert any("Temporary password" in m["text"] and m["to"] == "mo@example.edu" for m in emailer.SENT)
+
+
+# ---------------------------------------------------------------- supervisors clock in to shifts
+def test_shift_clock_in_requires_the_shop_code_and_changes_who_is_on_duty(client, db, demo):
+    from datetime import timedelta
+
+    from app import clock
+    from app.models import ShiftSchedule
+    from app.services import rotcode, shifts, shop
+    sam = db.scalar(select(StaffUser).where(StaffUser.username == "sam"))
+    now = clock.now()
+    db.add(ShiftSchedule(staff_id=sam.id, start_at=now - timedelta(minutes=5), end_at=now + timedelta(hours=4)))
+    db.commit()
+    assert shop.supervisor_scheduled(db, now).username == "sam" and shop.supervisor_on_duty(db, now) is None
+    from app.errors import UserError
+    with pytest.raises(UserError):
+        shifts.clock_in(db, sam, "0000" if rotcode.current(db)["code"] != "0000" else "1111", "1.1.1.1")
+    db.rollback()
+    shifts.clock_in(db, sam, rotcode.current(db)["code"], "1.1.1.1")
+    db.commit()
+    assert shop.supervisor_on_duty(db, clock.now()).username == "sam"
+    shifts.clock_out(db, sam)
+    db.commit()
+    assert shop.supervisor_on_duty(db, clock.now() + timedelta(seconds=1)) is None
+
+
+def test_missing_clock_in_alerts_admins_once_and_dashboard_form_works(client, db, demo):
+    from datetime import timedelta
+    from app import clock, emailer
+    from app.models import ShiftSchedule
+    from app.services import rotcode, shifts
+    sam = db.scalar(select(StaffUser).where(StaffUser.username == "sam"))
+    now = clock.now()
+    db.add(ShiftSchedule(staff_id=sam.id, start_at=now - timedelta(minutes=30), end_at=now + timedelta(hours=3)))
+    db.commit()
+    emailer.SENT.clear()
+    assert shifts.alert_missing(db, now) >= 1 and shifts.alert_missing(db, now) == 0
+    db.commit()
+    emailer.flush_outbox(db)
+    assert any("clock in" in m["subject"].lower() for m in emailer.SENT)
+    c, tok = login_as("sam")
+    try:
+        assert "Clock in to your shift" in c.get("/admin").text
+        bad = c.post("/admin/shift/clock-in", data={"csrf_token": tok, "code": "abc"}, follow_redirects=False)
+        assert bad.status_code == 400
+        ok = c.post("/admin/shift/clock-in", data={"csrf_token": tok, "code": rotcode.current(db)["code"]}, follow_redirects=False)
+        assert ok.status_code == 303
+        assert "You are clocked in" in c.get("/admin").text
+    finally:
+        c.__exit__(None, None, None)
+    m, tok = login_as("mo")
+    try:
+        assert m.post("/admin/shift/clock-in", data={"csrf_token": tok, "code": "1234"}).status_code == 403
+    finally:
+        m.__exit__(None, None, None)

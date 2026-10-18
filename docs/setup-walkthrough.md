@@ -180,7 +180,7 @@ Pretty addresses like `machineshop.csuchico.edu` need IT. In Render: service →
 
 ### 5.2 Create staff accounts (everyone gets their own login)
 On `/admin/users` → **Add staff user**:
-- **Username** (lowercase, e.g. `jsmith`), **Display name**, **Email** (needed so they get new-submission alerts), **Role**, **Password** (10+ characters; they should change it after first login).
+- **Username** (lowercase, e.g. `jsmith`), **Display name**, **Email** (required: the temporary password is emailed there), **Roles**. Leave the password blank and one is generated and emailed; the person must choose their own password at first login. **Reset password** works the same way.
 - **Roles** (tick one or more per person): Monitor (read-only), Floor supervisor (safety: check-ins, sessions, emergency stop), Part reviewer (approves projects), Trainer (certifications, approved list), Scheduler (reservations), Maintenance (machine status, incidents), Lead supervisor (all day-to-day ops), Admin (everything incl. settings, users, backups). Permissions combine when someone has several roles.
 - Create supervisors and student employees accordingly. Never share one login.
 

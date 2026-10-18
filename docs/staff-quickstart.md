@@ -1,6 +1,9 @@
 # Staff quick-start
 
 **Admin site:** `https://<your-site>/admin` — log in with your own username (never share logins).
+## Clocking in to a shift
+Being on the schedule is not enough: when your shift starts, open the dashboard, enter the 4-digit code shown on the shop TV (this proves you are in the shop) and press **Clock in**. Only clocked-in supervisors show as "Supervisor" on the TV and receive check-in alerts first. If you haven't clocked in 10 minutes after the shift starts, you and the admins get an email. Press **Clock out** if you leave early. Admins can turn the requirement off in Settings (*Supervisors must clock in*).
+
 ## Roles
 
 | Role | What they can do |
@@ -14,7 +17,7 @@
 | **Lead supervisor** | All day-to-day operations above |
 | **Admin** | Everything, plus settings, staff accounts, audit log, backups, the "super-approved" list |
 
-A person can hold several roles; their permissions combine. The last active admin can't be removed.
+New staff receive a temporary password by email and must choose their own at first sign-in (use *Change password* in the top bar any time). A person can hold several roles; their permissions combine. The last active admin can't be removed.
 
 ## Opening the shop
 1. Put the TV on `/tv` (full screen, F11). It shows the 4-digit **shop code**, machine status and the four QR codes.

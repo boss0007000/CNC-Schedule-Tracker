@@ -73,6 +73,10 @@ def test_tv_data_shape_and_privacy(client, db, demo):
     clock.freeze(at(0, 11, 5))
     sessions.check_in(db, alex, r.ref, rotcode.current(db)["code"], "1.1.1.1")
     db.commit()
+    from app.models import ShiftSchedule
+    for sh in db.scalars(select(ShiftSchedule)):
+        sh.checked_in_at = at(0, 8, 0)
+    db.commit()
     resp = client.get("/tv/data")
     assert resp.status_code == 200 and resp.headers["cache-control"] == "no-store"
     d = resp.json()

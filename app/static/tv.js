@@ -125,7 +125,7 @@
     var hrs = String(d.hours_label).replace(/:00/g, '').replace(' \u2013 ', '\u2013');
     o.textContent = d.shop_open ? 'OPEN · ' + hrs : (d.emergency.active ? 'CLOSED' : 'CLOSED · ' + hrs);
     o.className = 'open ' + (d.shop_open ? 'yes' : 'no');
-    $('supervisor').textContent = d.supervisor || 'none scheduled';
+    $('supervisor').textContent = d.supervisor || (d.supervisor_pending ? 'scheduled, not in yet' : 'none scheduled');
     $('code').textContent = d.code.value;
     $('code-left').textContent = 'changes in ' + Math.max(0, Math.ceil(d.code.seconds_left / 60)) + ' min';
     $('emergency').hidden = !d.emergency.active;

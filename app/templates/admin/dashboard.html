@@ -6,6 +6,13 @@
 <h1>Dashboard</h1>
 {{ errors(errs) }}
 {% if no_shifts %}<div class="errors" role="alert"><strong>No supervisor shifts are scheduled for the next 7 days.</strong> Machines marked "needs a supervisor" can't be booked until a shift exists. <a class="btn small" href="/admin/settings">Add shifts</a></div>{% endif %}
+{% if my_shift %}<div class="card" role="region" aria-label="Your shift">
+{% if my_shift_in %}<strong>You are clocked in</strong> until the end of your shift ({{ my_shift.end_at|localtime }}).
+<form method="post" action="/admin/shift/clock-out" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="small secondary">Clock out</button></form>
+{% else %}<strong>Clock in to your shift</strong> ({{ my_shift.start_at|localtime }} to {{ my_shift.end_at|localtime }}). Enter the 4-digit code shown on the shop TV so we know you are in the shop.
+<form method="post" action="/admin/shift/clock-in" class="toolbar"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label for="sc" class="sr">Shop code</label><input id="sc" name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="one-time-code" required class="sm w11">
+<button type="submit">Clock in</button></form>{% endif %}</div>{% endif %}
 {% if waiting_checkins %}<div class="errors" role="alert"><strong>{{ waiting_checkins }} check-in{{ 's' if waiting_checkins != 1 }} waiting for a supervisor.</strong> <a class="btn small" href="/admin/checkins">Review now</a></div>{% endif %}
 {% if cfg.emergency_active %}
 <div class="errors" role="alert"><strong>EMERGENCY CLOSE ACTIVE.</strong> {{ cfg.emergency_message }}

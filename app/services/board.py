@@ -149,6 +149,7 @@ def tv_payload(db: Session, now: datetime | None = None) -> dict:
         "server_time": now.isoformat(), "updated_label": _t(now), "shop_open": is_open,
         "hours_label": shop.day_label(db, clock.to_local(now).date()) if w else "Closed today",
         "supervisor": public_name(sup.display_name or sup.username) if sup else None,
+        "supervisor_pending": bool(not sup and shop.supervisor_scheduled(db, now)),
         "emergency": {"active": bool(cfg.emergency_active), "message": cfg.emergency_message},
         "code": {"value": code["code"], "seconds_left": code["seconds_left"]},
         "machines": machines, "shop_name": cfg.shop_name, "window": window, "week": week_payload(db, rows, now),

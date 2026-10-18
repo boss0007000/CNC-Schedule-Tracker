@@ -37,6 +37,37 @@ def login(request: Request, form=Depends(get_form), db: Session = Depends(get_db
     return resp
 
 
+def _own_user(request: Request, db: Session) -> StaffUser:
+    """Signed-in staff, even if they still must change their password (this is the page that fixes that)."""
+    from app.web import NeedsStaffLogin
+    u = staffauth.user_from_token(db, request.cookies.get(staffauth.COOKIE))
+    if u is None:
+        raise NeedsStaffLogin("/admin/password")
+    return u
+
+
+@router.get("/password")
+def password_form(request: Request, db: Session = Depends(get_db)):
+    u = _own_user(request, db)
+    return render(request, "admin/password.html", {"errs": [], "forced": u.must_change_password})
+
+
+@router.post("/password")
+def password_post(request: Request, form=Depends(get_form), db: Session = Depends(get_db)):
+    u = _own_user(request, db)
+    try:
+        security.rate_check(db, f"pwchange:{u.id}", 10, 600)
+        staffauth.change_own_password(db, u, form.get("current", ""), form.get("password", ""), form.get("confirm", ""))
+    except UserError as e:
+        db.commit()
+        return render(request, "admin/password.html", {"errs": [e.message], "forced": u.must_change_password}, status=400)
+    db.commit()
+    resp = RedirectResponse("/admin", status_code=303)  # old sessions were invalidated; issue a fresh one
+    resp.set_cookie(staffauth.COOKIE, staffauth.make_session_token(u), max_age=staffauth.SESSION_MAX_AGE,
+                    httponly=True, samesite="lax", secure=get_config().secure_cookies)
+    return resp
+
+
 @router.post("/logout")
 def logout():
     resp = RedirectResponse("/admin/login", status_code=303)
@@ -64,7 +95,8 @@ def users_post(request: Request, form=Depends(get_form), user: StaffUser = Depen
         if action == "create":
             chosen = form.getlist("roles") or ([form["role"]] if form.get("role") else [])
             staffauth.create_user(db, form.get("username", ""), form.get("password", ""), chosen[0] if chosen else "",
-                                  form.get("display_name", ""), form.get("email") or None, staff_actor(user), roles=chosen)
+                                  form.get("display_name", ""), form.get("email") or None, staff_actor(user), roles=chosen,
+                                  email_password=True)
         elif action in ("deactivate", "activate", "reset_password", "set_roles"):
             target = db.get(StaffUser, int(form.get("id", 0)))
             if target is None:
@@ -86,7 +118,7 @@ def users_post(request: Request, form=Depends(get_form), user: StaffUser = Depen
             elif action == "set_roles":
                 staffauth.set_roles(db, staff_actor(user), target, form.getlist("roles"))
             else:
-                staffauth.set_password(db, target, form.get("password", ""), staff_actor(user))
+                staffauth.admin_reset_password(db, staff_actor(user), target, form.get("password", ""))
     except UserError as e:
         db.rollback()
         return render(request, "admin/users.html", _users_ctx(db, [e.message]), status=400)

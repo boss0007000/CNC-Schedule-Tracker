@@ -136,6 +136,11 @@ def create_app() -> FastAPI:
     async def _nv(request, exc):
         return web.needs_verification_response(exc)
 
+    @app.exception_handler(web.NeedsPasswordChange)
+    async def _npc(request, exc):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("/admin/password", status_code=303)
+
     @app.exception_handler(web.NeedsStaffLogin)
     async def _nl(request, exc):
         return web.needs_login_response(exc)

@@ -20,7 +20,7 @@
 <form class="inline" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}">
 {% if u.active %}<button class="small danger" name="action" value="deactivate">Disable</button>{% else %}<button class="small" name="action" value="activate">Enable</button>{% endif %}</form>
 <form class="inline" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}">
-<input type="password" name="password" placeholder="New password" aria-label="New password" autocomplete="new-password" class="sm w11">
+<input type="password" name="password" placeholder="Blank = email a new one" aria-label="New password" autocomplete="new-password" class="sm w11">
 <button class="small secondary" name="action" value="reset_password">Reset password</button></form>
 </td></tr>{% endfor %}
 </table></div>
@@ -28,9 +28,10 @@
 <form method="post" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="create">
 <label for="nu">Username</label><input id="nu" name="username" required>
 <label for="nd">Display name</label><input id="nd" name="display_name">
-<label for="ne">Email (needed to get alerts)</label><input id="ne" name="email" type="email">
+<label for="ne">Email (needed to get alerts)</label><input id="ne" name="email" type="email" required>
 <fieldset><legend>Roles (choose one or more)</legend>
 {% for r in roles %}<div class="check"><label><input type="checkbox" name="roles" value="{{ r }}" {% if r == 'monitor' %}checked{% endif %}><span><strong>{{ info[r][0] }}</strong>: {{ info[r][1] }}</span></label></div>{% endfor %}</fieldset>
-<label for="np">Password (10+ characters)</label><input id="np" name="password" type="password" autocomplete="new-password" required>
+<label for="np">Temporary password (optional)</label><input id="np" name="password" type="password" autocomplete="new-password">
+<p class="help">Leave blank to generate one. It is emailed to them, and they must choose their own password the first time they sign in. An email address is required.</p>
 <button class="block" type="submit">Create user</button></form>
 {% endblock %}

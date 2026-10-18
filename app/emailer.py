@@ -77,6 +77,9 @@ def queue(db: Session, to: str, subject: str, text: str, html: str | None = None
     return row
 
 
+SECRET_SUBJECT_PREFIX = "Your staff login"
+
+
 def flush_outbox(db: Session, limit: int = 50) -> int:
     """Deliver pending messages. Failures are retried up to 5 times, never raised."""
     provider = PROVIDERS.get(get_config().email_provider, _send_console)
@@ -89,6 +92,8 @@ def flush_outbox(db: Session, limit: int = 50) -> int:
         try:
             provider(row.to_email, row.subject, row.body_text, row.body_html)
             row.status, row.sent_at, row.last_error = "sent", clock.now(), None
+            if row.subject.startswith(SECRET_SUBJECT_PREFIX):  # don't keep temporary passwords in the database
+                row.body_text, row.body_html = "(removed after sending)", None
             sent += 1
         except Exception as e:  # noqa: BLE001
             row.last_error = str(e)[:500]

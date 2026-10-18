@@ -103,18 +103,47 @@ def set_roles(db: Session, actor: str, user: StaffUser, roles) -> None:
     audit.record(db, actor, "staff.roles", "staff_user", user.id, {"roles": before}, {"roles": clean})
 
 
+def generate_password() -> str:
+    """Readable temporary password (no look-alike characters), ~70 bits."""
+    import secrets
+    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+    return "-".join("".join(secrets.choice(alphabet) for _ in range(5)) for _ in range(3))
+
+
+def email_credentials(db: Session, u: StaffUser, password: str, reason: str) -> None:
+    from app.config import get_config
+    from app.emailer import SECRET_SUBJECT_PREFIX, queue
+    from app.services import settings as shop_settings
+    shop = shop_settings.load(db).shop_name
+    base = get_config().base_url.rstrip("/")
+    text = (f"Hi {u.display_name},\n\n{reason}\n\nSign in: {base}/admin/login\nUsername: {u.username}\n"
+            f"Temporary password: {password}\n\nYou will be asked to choose your own password the first time you sign in. "
+            f"Do not share this email or your password.\n\n{shop}")
+    queue(db, u.email, f"{SECRET_SUBJECT_PREFIX} for {shop}", text)
+
+
 def create_user(db: Session, username: str, password: str, role: str, display_name: str = "",
-                email: str | None = None, actor: str = "system", roles: list[str] | None = None) -> StaffUser:
+                email: str | None = None, actor: str = "system", roles: list[str] | None = None,
+                email_password: bool = False) -> StaffUser:
+    """email_password=True: generate a temporary password when none is given, email it and force a change at first login."""
     username = username.strip().lower()
     chosen = normalize_roles(roles if roles else [role])
+    auto = email_password
+    if auto:
+        if not email:
+            raise UserError("An email address is required so the temporary password can be sent.", field="email")
+        password = password or generate_password()
     if len(password) < 10:
         raise UserError("Password must be at least 10 characters.", field="password")
     if db.scalar(select(StaffUser).where(func.lower(StaffUser.username) == username)):
         raise UserError("That username is already taken.", field="username")
     u = StaffUser(username=username, display_name=display_name or username,
-                  password_hash=security.hash_password(password), role=primary_role(chosen), roles=chosen, email=email)
+                  password_hash=security.hash_password(password), role=primary_role(chosen), roles=chosen, email=email,
+                  must_change_password=auto)
     db.add(u)
     db.flush()
+    if auto:
+        email_credentials(db, u, password, "An account has been created for you.")
     audit.record(db, actor, "staff.create", "staff_user", u.id, after={"username": username, "roles": chosen})
     return u
 
@@ -162,5 +191,27 @@ def set_password(db: Session, u: StaffUser, new_password: str, actor: str) -> No
     if len(new_password) < 10:
         raise UserError("Password must be at least 10 characters.", field="password")
     u.password_hash = security.hash_password(new_password)
+    u.must_change_password = False
     u.session_epoch += 1  # logs out existing sessions
     audit.record(db, actor, "staff.password_change", "staff_user", u.id)
+
+
+def admin_reset_password(db: Session, actor: str, u: StaffUser, new_password: str = "") -> None:
+    """Admin reset: blank = generate one and email it. Either way the person must choose their own at next login."""
+    if not new_password and not u.email:
+        raise UserError("This person has no email address on file. Type a temporary password instead.", field="password")
+    pw = new_password or generate_password()
+    set_password(db, u, pw, actor)
+    u.must_change_password = True
+    if u.email:
+        email_credentials(db, u, pw, "Your password was reset by an administrator.")
+
+
+def change_own_password(db: Session, u: StaffUser, current: str, new: str, confirm: str) -> None:
+    if not security.verify_password(u.password_hash, current):
+        raise UserError("Your current password is incorrect.", field="current")
+    if new != confirm:
+        raise UserError("The new passwords don't match.", field="password")
+    if security.verify_password(u.password_hash, new):
+        raise UserError("Choose a new password that is different from the temporary one.", field="password")
+    set_password(db, u, new, f"staff:{u.username}")

@@ -179,7 +179,7 @@ def change_accepted(db: Session, req, new_res, old) -> None:
                   f"Hi {req.target_student.first_name},\n\nThanks for being flexible. Your reservation {t.ref} on the {m} used to be "
                   f"{_win(old[0], old[1])} and is now {_win(t.start_at, t.end_at)}.\n\nManage it: {cancel_link(t)}\n\n— {_shop(db)}")
     from app.services import shop
-    sup = shop.supervisor_on_duty(db, clock.now())
+    sup = shop.supervisor_on_duty(db, clock.now()) or shop.supervisor_scheduled(db, clock.now())
     to = [sup.email] if sup and sup.email else staff_recipients(db)
     for addr in to:
         emailer.queue(db, addr, f"Schedule swap on {m}: {req.requester.public_name} / {req.target_student.public_name}",
@@ -246,7 +246,7 @@ def closing_prompt(db: Session, s) -> None:
 def checkin_waiting(db: Session, s) -> None:
     """Tell the supervisor on duty (or all supervisors if nobody is scheduled) that someone is waiting."""
     from app.services import shop
-    sup = shop.supervisor_on_duty(db, clock.now())
+    sup = shop.supervisor_on_duty(db, clock.now()) or shop.supervisor_scheduled(db, clock.now())
     to = [sup.email] if sup and sup.email else staff_recipients(db)
     for addr in to:
         emailer.queue(db, addr, f"Check-in waiting: {s.student.public_name} on {s.machine.name}",

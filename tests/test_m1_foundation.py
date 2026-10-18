@@ -140,7 +140,7 @@ def test_utc_storage_roundtrip(db):
 def test_staff_admin_actions_in_audit(client, db, demo):
     tok = staff_login(client, "admin")
     client.post("/admin/users", data={"csrf_token": tok, "action": "create", "username": "newbie",
-                                      "password": "very-long-password", "role": "monitor"})
+                                      "email": "newbie@example.edu", "role": "monitor"})
     row = db.scalar(select(AuditLog).where(AuditLog.action == "staff.create").order_by(AuditLog.id.desc()))
     assert row.actor == "staff:admin" and row.after["username"] == "newbie"
     assert db.scalar(select(StaffUser).where(StaffUser.username == "newbie")).role == "monitor"

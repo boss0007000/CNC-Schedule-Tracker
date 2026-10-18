@@ -75,6 +75,17 @@ def business_day_number(db: Session, start_day: date, today: date, location_id: 
 
 
 def supervisor_on_duty(db: Session, at: datetime, location_id: int = 1) -> StaffUser | None:
+    """Who is actually on duty: scheduled AND clocked in (unless the clock-in requirement is switched off)."""
+    from app.services import settings as shop_settings
+    q = select(ShiftSchedule).where(ShiftSchedule.location_id == location_id, ShiftSchedule.start_at <= at, ShiftSchedule.end_at > at)
+    if shop_settings.load(db).require_shift_clockin:
+        q = q.where(ShiftSchedule.checked_in_at.is_not(None), ShiftSchedule.checked_in_at <= at,
+                    (ShiftSchedule.checked_out_at.is_(None)) | (ShiftSchedule.checked_out_at > at))
+    shift = db.scalar(q.order_by(ShiftSchedule.start_at))
+    return shift.staff if shift else None
+
+
+def supervisor_scheduled(db: Session, at: datetime, location_id: int = 1) -> StaffUser | None:
     shift = db.scalar(select(ShiftSchedule).where(ShiftSchedule.location_id == location_id,
                                                   ShiftSchedule.start_at <= at, ShiftSchedule.end_at > at)
                       .order_by(ShiftSchedule.start_at))
