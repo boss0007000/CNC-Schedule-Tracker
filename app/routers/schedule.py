@@ -20,14 +20,33 @@ def _viewer(request: Request, db: Session):
     return identity.current_student(db, request)
 
 
+def _parse_day(value: str, default, lo, hi):
+    try:
+        d = datetime.strptime(value, "%Y-%m-%d").date() if value else default
+    except ValueError:
+        d = default
+    return max(lo, min(d, hi))
+
+
 @router.get("/schedule")
-def schedule_index(request: Request, db: Session = Depends(get_db)):
+def schedule_index(request: Request, start: str = "", db: Session = Depends(get_db)):
+    from app.services import board
+    cfg = shop_settings.load(db)
+    now = clock.now()
+    today = clock.to_local(now).date()
+    last = today + timedelta(days=cfg.max_advance_days)
+    first = _parse_day(start, today, today, last)
     rows = status.board(db)
-    return render(request, "schedule_index.html", {"rows": rows, "student": _viewer(request, db)})
+    week = board.week_payload(db, rows, now, days=7, start=first)
+    return render(request, "schedule_index.html", {
+        "rows": rows, "week": week, "student": _viewer(request, db), "first": first,
+        "prev": max(today, first - timedelta(days=7)) if first > today else None,
+        "next": first + timedelta(days=7) if first + timedelta(days=7) <= last else None,
+        "status_of": {m.id: st for m, st in rows}})
 
 
 @router.get("/machine/{mid}")
-def machine_schedule(mid: int, request: Request, date: str = "", db: Session = Depends(get_db)):
+def machine_schedule(mid: int, request: Request, date: str = "", start: str = "", db: Session = Depends(get_db)):
     student = _viewer(request, db)
     m = db.get(Machine, mid)
     if m is None or not m.active:
@@ -37,11 +56,12 @@ def machine_schedule(mid: int, request: Request, date: str = "", db: Session = D
     security.rate_check(db, who_key, 300, 3600, "You're looking things up very quickly. Please wait a bit.")
     cfg = shop_settings.load(db)
     today = clock.to_local(clock.now()).date()
-    try:
-        day = datetime.strptime(date, "%Y-%m-%d").date() if date else today
-    except ValueError:
-        day = today
-    day = max(today, min(day, today + timedelta(days=cfg.max_advance_days)))
+    last = today + timedelta(days=cfg.max_advance_days)
+    first = _parse_day(start, today, today, last)
+    day = _parse_day(date, first, today, last)
+    from app.services import calendar as cal
+    CAL_DAYS = 14
+    calendar = cal.machine_calendar(db, m, first, CAL_DAYS, clock.now(), student.id if student else None)
     start = clock.local_dt(day, datetime.min.time())
     end = start + timedelta(days=1)
     rows = db.scalars(select(Reservation).where(
@@ -74,6 +94,9 @@ def machine_schedule(mid: int, request: Request, date: str = "", db: Session = D
     return render(request, "machine_schedule.html", {
         "m": m, "day": day, "prev": day - timedelta(days=1) if day > today else None,
         "next": day + timedelta(days=1) if day < today + timedelta(days=cfg.max_advance_days) else None,
+        "calendar": calendar, "first": first,
+        "cal_prev": max(today, first - timedelta(days=CAL_DAYS)) if first > today else None,
+        "cal_next": first + timedelta(days=CAL_DAYS) if first + timedelta(days=CAL_DAYS) <= last else None,
         "items": items, "open_slots": open_slots, "state": state, "on_now": sess, "today": today,
         "hold": hold, "hold_contact": (contact.display(hold.student.shown_contact) if (hold and show_phone) else None), "hold_c": (hold.student.shown_contact if (hold and show_phone) else None), "student": student,
         "show_phone": show_phone, "bookable": bool(student) and access.machine_allows(access.effective_level(db, student), m)})

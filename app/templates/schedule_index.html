@@ -1,10 +1,20 @@
 {% extends "base.html" %}
 {% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block mainclass %}wide{% endblock %}
 {% block content %}
 <h1>Machine schedules</h1>
-<p class="muted">See who has each machine and when it is free. You can reach another student about swapping time.</p>
-{% for m, st in rows %}<a class="tile plain" href="/machine/{{ m.id }}">
-<strong>{{ m.name }}</strong> <span class="pill s-{{ st.status }}">{{ st.label }}</span>
-{% if st.current_user %}<br>{{ st.current_user }} is on it now{% endif %}
-{% if m.access_level == 'staff_only' %}<br><span class="muted">Run by shop staff</span>{% endif %}</a>{% endfor %}
+<p class="muted">The week at a glance. Each box is a day; each little block is a time slot. Tap a machine or a day to see exactly who has it and when it is free.</p>
+<p class="calnav">{% if prev %}<a class="btn small secondary" href="?start={{ prev }}">← Earlier week</a>{% endif %}
+<strong>{{ week.days[0].label }} {{ first.strftime('%b %d').replace(' 0', ' ') }} – {{ week.days[-1].label }}</strong>
+{% if next %}<a class="btn small secondary" href="?start={{ next }}">Later week →</a>{% endif %}</p>
+<div class="tablewrap"><table class="weekcal">
+<caption class="sr">Availability of every machine for seven days</caption>
+<thead><tr><th scope="col">Machine</th>{% for d in week.days %}<th scope="col" class="{{ 'today' if d.today }}">{{ d.label }}<br><span class="muted">{{ d.date }}</span></th>{% endfor %}</tr></thead>
+<tbody>{% for mc in week.machines %}{% set st = status_of[mc.id] %}<tr>
+<th scope="row"><a href="/machine/{{ mc.id }}">{{ mc.name }}</a><br><span class="pill s-{{ st.status }}">{{ st.label }}</span>{% if mc.staff_run %}<br><span class="muted">Run by staff</span>{% endif %}</th>
+{% for c in mc.cells %}{% set d = week.days[loop.index0] %}<td class="{{ 'today' if d.today }}">
+{% if c.closed %}<span class="muted">Closed</span>{% else %}<a class="daycell" href="/machine/{{ mc.id }}?start={{ d.iso }}&amp;date={{ d.iso }}" aria-label="{{ mc.name }} {{ d.label }} {{ d.date }}: {{ c.free_hours }} hours open">
+<span class="strip">{% for s in c.states %}<span class="sl sl-{{ s }}"></span>{% endfor %}</span><span class="free">{{ c.free_hours|round|int if c.free_hours == c.free_hours|round else c.free_hours }}h open</span></a>{% endif %}</td>{% endfor %}
+</tr>{% endfor %}</tbody></table></div>
+<p class="legend"><span class="sl sl-free"></span> open <span class="sl sl-booked"></span> booked <span class="sl sl-inuse"></span> in use <span class="sl sl-hold"></span> setup/tools left in machine <span class="sl sl-down"></span> out of service <span class="sl sl-past"></span> past</p>
 {% endblock %}

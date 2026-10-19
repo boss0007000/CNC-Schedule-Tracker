@@ -99,3 +99,28 @@ def test_saved_qr_without_the_tv_code_cannot_check_in(client, db, demo):
         assert resp.status_code == 400, bad
     db.expire_all()
     assert db.scalar(select(ShopSession).where(ShopSession.student_id == alex.id)) is None
+
+
+# ---------------------------------------------------------------- calendar schedule pages
+def test_schedule_pages_are_calendars_and_machine_page_spans_two_weeks(client, db, demo):
+    from datetime import timedelta
+    m = machine(db, "Haas Mini Mill 1")
+    html = client.get("/schedule").text
+    assert 'class="weekcal"' in html and "Later week" in html and "/machine/%d?start=" % m.id in html
+    page = client.get(f"/machine/{m.id}").text
+    assert 'class="cal"' in page and page.count('scope="col"') >= 14 and "Later 2 weeks" in page
+    nxt = (clock.to_local(clock.now()).date() + timedelta(days=14)).isoformat()
+    assert client.get(f"/machine/{m.id}?start={nxt}").status_code == 200
+    assert client.get(f"/machine/{m.id}?start=garbage&date=also-bad").status_code == 200
+    assert client.get("/schedule?start=nonsense").status_code == 200
+
+
+def test_calendar_shows_a_booking_with_the_booker_name_and_mine_for_the_viewer(client, db, demo):
+    from tests.factories import book
+    verify_student(client, "alex.rivera@csuchico.edu", "Alex Rivera")
+    alex = student(db, "alex")
+    a = db.scalar(select(Approval).where(Approval.student_id == alex.id))
+    m = machine(db, "Haas Mini Mill 1")
+    book(db, alex, a, "Haas Mini Mill 1", at(1, 11))
+    db.commit()
+    assert "c-mine" in client.get(f"/machine/{m.id}").text

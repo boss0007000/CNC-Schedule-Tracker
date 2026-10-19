@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block mainclass %}wide{% endblock %}
 {% block content %}
 <h1>{{ m.name }}</h1>
 <p><span class="pill s-{{ state.status }}">{{ state.label }}</span>
@@ -7,8 +8,22 @@
 {% if hold %}<div class="errors" role="alert"><strong>Do not touch:</strong> {{ hold.student.public_name }}'s {{ 'setup' if hold.kind == 'setup' else 'tools' }} {{ 'is' if hold.kind == 'setup' else 'are' }} in this machine until {{ hold.expires_at|local }}.
 {% if (not student or hold.student_id != student.id) and hold_c and show_phone %}<div class="toolbar"><span>{{ '☎' if hold_c[0] == 'phone' else '✉' }} {{ hold_contact.text }}</span>{% if hold_c[0] == 'phone' %}<a class="btn small" href="tel:{{ hold_c[1] }}">Call</a><a class="btn small secondary" href="sms:{{ hold_c[1] }}">Text</a>{% else %}<a class="btn small" href="mailto:{{ hold_c[1] }}">Email</a>{% endif %}</div>{% elif student and hold.student_id == student.id %}<a class="btn small" href="/my">Manage in My shop</a>{% endif %}</div>{% endif %}
 {% if m.access_level == 'staff_only' %}<div class="notice">This machine is run by shop staff. Submit your part on the <a href="/submit">project form</a> and staff will make it.</div>{% endif %}
-<p>{% if prev %}<a href="?date={{ prev }}">← Previous day</a> · {% endif %}<strong>{{ day.strftime('%A %b %d') }}</strong>{% if next %} · <a href="?date={{ next }}">Next day →</a>{% endif %}</p>
-<h2>Booked</h2>
+
+<p class="calnav">{% if cal_prev %}<a class="btn small secondary" href="?start={{ cal_prev }}">← Earlier 2 weeks</a>{% endif %}
+<strong>{{ calendar.days[0].dom }} – {{ calendar.days[-1].dom }}</strong>
+{% if cal_next %}<a class="btn small secondary" href="?start={{ cal_next }}">Later 2 weeks →</a>{% endif %}</p>
+<div class="tablewrap"><table class="cal">
+<caption class="sr">{{ m.name }} schedule for two weeks. Tap a day heading for the details.</caption>
+<thead><tr><th scope="col">Time</th>{% for d in calendar.days %}<th scope="col" class="{{ 'today' if d.today }}{{ ' sel' if d.iso == day.isoformat() }}"><a href="?start={{ first }}&amp;date={{ d.iso }}#day">{{ d.dow }}<br>{{ d.dom }}</a></th>{% endfor %}</tr></thead>
+<tbody>{% for row in calendar.rows %}<tr><th scope="row">{{ row.time }}</th>
+{% for c in row.cells %}{% set d = calendar.days[loop.index0] %}<td class="c c-{{ c.state }}">
+{% if c.state == 'free' %}<a href="/reserve?machine={{ m.id }}&amp;date={{ d.iso }}" aria-label="Open {{ d.dow }} {{ d.dom }} {{ row.time }}">Open</a>
+{% elif c.state in ('booked', 'inuse', 'mine') %}{{ c.label }}
+{% elif c.state == 'hold' %}Hold{% elif c.state == 'down' %}Down{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+<p class="legend"><span class="sl sl-free"></span> open (tap to reserve) <span class="sl sl-booked"></span> booked <span class="sl sl-mine"></span> yours <span class="sl sl-inuse"></span> in use <span class="sl sl-hold"></span> setup/tools left in machine <span class="sl sl-down"></span> out of service</p>
+
+<h2 id="day">{{ day.strftime('%A %b %d') }}</h2>
+<h3>Booked</h3>
 {% for it in items %}<div class="card">
   <strong>{{ it.r.start_at|localtime }} – {{ it.r.end_at|localtime }}</strong> · {% if it.mine %}<b>You</b>{% else %}{{ it.who }}{% endif %}
   {% if it.live %}<span class="pill s-in_use">On the machine now</span>{% elif it.r.status == 'completed' %}<span class="muted">(done)</span>{% endif %}
@@ -18,7 +33,7 @@
     {% if it.ask %}<a class="btn small secondary" href="/requests/new?res={{ it.r.id }}">Ask to change time</a>{% endif %}
   </div>{% endif %}
 </div>{% else %}<p class="muted">Nothing booked this day.</p>{% endfor %}
-<h2>Open times</h2>
+<h3>Open times</h3>
 {% if open_slots %}<p>{% for s, e in open_slots %}{{ s|localtime }}–{{ e|localtime }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
 {% if bookable %}<p><a class="btn" href="/reserve?machine={{ m.id }}&date={{ day }}">Reserve a time</a></p>
 {% elif not student %}<p><a class="btn" href="/reserve?machine={{ m.id }}&date={{ day }}">Sign in to reserve a time</a></p>{% endif %}

@@ -55,15 +55,16 @@ def _timeline(db: Session, rows, now: datetime) -> tuple[dict, dict]:
     return {"start": ep(w0), "end": ep(w1), "now": ep(now), "ticks": ticks}, segs
 
 
-def week_payload(db: Session, rows, now: datetime, days: int = 7) -> dict:
+def week_payload(db: Session, rows, now: datetime, days: int = 7, start=None) -> dict:
     """Availability of every machine for the next `days` days, one cell per day, one block per slot.
     Public-safe: no names, only free / booked / in use / hold / down / past / closed."""
     from datetime import time as dtime
     cfg = shop_settings.load(db)
     today = clock.to_local(now).date()
-    day_list = [today + timedelta(days=i) for i in range(days)]
+    first = start or today
+    day_list = [first + timedelta(days=i) for i in range(days)]
     ids = [m.id for m, _ in rows]
-    w0, w1 = clock.local_dt(today, dtime(0)), clock.local_dt(today + timedelta(days=days), dtime(0))
+    w0, w1 = clock.local_dt(first, dtime(0)), clock.local_dt(first + timedelta(days=days), dtime(0))
     res = db.scalars(select(Reservation).where(Reservation.machine_id.in_(ids), Reservation.status.in_(("confirmed", "checked_in")),
                                                Reservation.start_at < w1, Reservation.end_at > w0)).all()
     holds_ = db.scalars(select(MachineHold).where(MachineHold.machine_id.in_(ids), MachineHold.released_at.is_(None),
@@ -75,7 +76,7 @@ def week_payload(db: Session, rows, now: datetime, days: int = 7) -> dict:
     for d in day_list:
         g = shop.slot_grid(db, d, cfg.slot_minutes)
         grids[d] = g
-        out_days.append({"label": d.strftime("%a"), "date": d.day, "today": d == today, "closed": not g})
+        out_days.append({"label": d.strftime("%a"), "date": d.day, "iso": d.isoformat(), "today": d == today, "closed": not g})
     machines = []
     for m, st in rows:
         cells = []
