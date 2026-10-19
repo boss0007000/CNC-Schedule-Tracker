@@ -139,6 +139,9 @@ def create_user(db: Session, username: str, password: str, role: str, display_na
         raise UserError("Password must be at least 10 characters.", field="password")
     if db.scalar(select(StaffUser).where(func.lower(StaffUser.username) == username)):
         raise UserError("That username is already taken.", field="username")
+    if username in deleted_usernames(db):
+        raise UserError("That username belonged to a deleted account. Choose a different one so the audit history stays unambiguous.",
+                        field="username")
     u = StaffUser(username=username, display_name=display_name or username,
                   password_hash=security.hash_password(password), role=primary_role(chosen), roles=chosen, email=email,
                   must_change_password=auto)
@@ -260,3 +263,30 @@ def set_training(db: Session, actor: str, target: StaffUser, machine_ids: list[i
     audit.record(db, actor, "staff.training_authorization", "staff_user", target.id,
                  before={"machines": sorted(before[1]), "groups": sorted(before[2])},
                  after={"machines": sorted(machine_ids), "groups": sorted(group_ids)})
+
+
+def deleted_usernames(db: Session) -> set[str]:
+    from app.models import AuditLog
+    return {(r or {}).get("username", "") for r in db.scalars(select(AuditLog.before).where(AuditLog.action == "staff.delete"))}
+
+
+def delete_user(db: Session, actor: str, target: StaffUser, confirm_username: str) -> None:
+    """Remove the account but keep every audit entry they ever made (actions are stored under their username).
+    The deletion itself is logged with a snapshot of who they were. Their username can't be reused."""
+    from app.models import ShiftSchedule, TrainerAuthorization
+    if (confirm_username or "").strip().lower() != target.username:
+        raise UserError(f"Type the username ({target.username}) to confirm the deletion.")
+    if actor == f"staff:{target.username}":
+        raise UserError("You can't delete yourself.")
+    if "admin" in roles_of(target) and target.active and not db.scalar(
+            select(func.count()).select_from(StaffUser).where(StaffUser.active.is_(True), StaffUser.id != target.id,
+                                                              StaffUser.role == "admin")):
+        raise UserError("There must always be at least one active admin.")
+    snap = {"username": target.username, "display_name": target.display_name, "email": target.email,
+            "roles": sorted(roles_of(target)), "created_at": target.created_at, "last_login_at": target.last_login_at,
+            "was_active": target.active}
+    n_shifts = db.query(ShiftSchedule).filter(ShiftSchedule.staff_id == target.id).delete()
+    db.query(TrainerAuthorization).filter(TrainerAuthorization.staff_id == target.id).delete()
+    audit.record(db, actor, "staff.delete", "staff_user", target.id, before=snap, after={"shifts_removed": n_shifts})
+    db.delete(target)
+    db.flush()

@@ -103,7 +103,7 @@ def users_post(request: Request, form=Depends(get_form), user: StaffUser = Depen
             staffauth.create_user(db, form.get("username", ""), form.get("password", ""), chosen[0] if chosen else "",
                                   form.get("display_name", ""), form.get("email") or None, staff_actor(user), roles=chosen,
                                   email_password=True)
-        elif action in ("deactivate", "activate", "reset_password", "set_roles", "set_training"):
+        elif action in ("deactivate", "activate", "reset_password", "set_roles", "set_training", "delete"):
             target = db.get(StaffUser, int(form.get("id", 0)))
             if target is None:
                 raise UserError("Unknown user.")
@@ -121,6 +121,8 @@ def users_post(request: Request, form=Depends(get_form), user: StaffUser = Depen
             elif action == "activate":
                 target.active = True
                 audit.record(db, staff_actor(user), "staff.activate", "staff_user", target.id)
+            elif action == "delete":
+                staffauth.delete_user(db, staff_actor(user), target, form.get("confirm", ""))
             elif action == "set_training":
                 ints = lambda k: [int(x) for x in form.getlist(k) if str(x).isdigit()]  # noqa: E731
                 staffauth.set_training(db, staff_actor(user), target, ints("machines"), ints("groups"))

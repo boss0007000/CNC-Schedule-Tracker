@@ -25,6 +25,10 @@
 <button class="small">Save training authorization</button></form></details>{% endif %}
 <form class="inline" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}">
 {% if u.active %}<button class="small danger" name="action" value="deactivate">Disable</button>{% else %}<button class="small" name="action" value="activate">Enable</button>{% endif %}</form>
+<details><summary>Delete</summary><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}"><input type="hidden" name="action" value="delete">
+<p class="help">Removes the account for good. Everything they did stays in the audit log, and the deletion is recorded there too. Their username can't be reused. To only stop someone logging in, use Disable instead.</p>
+<label for="dc{{ u.id }}">Type <strong>{{ u.username }}</strong> to confirm</label><input id="dc{{ u.id }}" name="confirm" autocomplete="off" required>
+<button class="small danger">Delete user</button></form></details>
 <form class="inline" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="id" value="{{ u.id }}">
 <input type="password" name="password" placeholder="Blank = email a new one" aria-label="New password" autocomplete="new-password" class="sm w11">
 <button class="small secondary" name="action" value="reset_password">Reset password</button></form>

@@ -361,3 +361,32 @@ def test_lead_supervisor_and_admin_can_certify_anywhere(client, db, demo):
         assert db.scalars(select(Certification).where(Certification.student_id == alex.id)).all()
     finally:
         c.__exit__(None, None, None)
+
+
+# ---------------------------------------------------------------- deleting staff, keeping history
+def test_delete_user_keeps_their_history_and_logs_the_deletion(client, db, demo):
+    from app.models import AuditLog, ShiftSchedule
+    from app.services import audit
+    tok = staff_login(client, "admin")
+    sam = db.scalar(select(StaffUser).where(StaffUser.username == "sam"))
+    audit.record(db, "staff:sam", "machine.override", "machine", 1, after={"status": "on_hold"})
+    sid = sam.id
+    db.commit()
+    # wrong confirmation / self / last admin are refused
+    assert "Type the username" in client.post("/admin/users", data={"csrf_token": tok, "action": "delete", "id": sid,
+                                                                    "confirm": "nope"}).text
+    admin = db.scalar(select(StaffUser).where(StaffUser.username == "admin"))
+    assert client.post("/admin/users", data={"csrf_token": tok, "action": "delete", "id": admin.id, "confirm": "admin"}).status_code == 400
+    r = client.post("/admin/users", data={"csrf_token": tok, "action": "delete", "id": sid, "confirm": "sam"}, follow_redirects=False)
+    assert r.status_code == 303
+    db.expire_all()
+    assert db.get(StaffUser, sid) is None
+    assert not db.scalars(select(ShiftSchedule).where(ShiftSchedule.staff_id == sid)).all()
+    assert db.scalar(select(AuditLog).where(AuditLog.actor == "staff:sam", AuditLog.action == "machine.override"))  # history kept
+    gone = db.scalar(select(AuditLog).where(AuditLog.action == "staff.delete"))
+    assert gone.actor == "staff:admin" and gone.before["username"] == "sam" and "supervisor" in gone.before["roles"]
+    # the name can't be reused, so old entries never get attributed to someone new
+    r = client.post("/admin/users", data={"csrf_token": tok, "action": "create", "username": "sam", "email": "x@example.edu",
+                                          "roles": ["monitor"]})
+    assert r.status_code == 400 and "deleted account" in r.text
+    assert "staff.delete" in client.get("/admin/audit?q=staff.delete").text
