@@ -588,6 +588,7 @@ class EmailOutbox(Base):
     subject: Mapped[str] = mapped_column(String(255))
     body_text: Mapped[str] = mapped_column(Text)
     body_html: Mapped[str | None] = mapped_column(Text)
+    reply_to: Mapped[str | None] = mapped_column(String(255))  # where replies should go (a staff mailbox)
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)  # pending|sent|failed
     attempts: Mapped[int] = mapped_column(default=0)
     last_error: Mapped[str | None] = mapped_column(String(500))

@@ -7,6 +7,9 @@ Admin > QR codes lists a check-in QR code for every machine (PNG or one-page pos
 ## Clocking in to a shift
 Being on the schedule is not enough: when your shift starts, open the dashboard, enter the 4-digit code shown on the shop TV (this proves you are in the shop) and press **Clock in**. Only clocked-in supervisors show as "Supervisor" on the TV and receive check-in alerts first. If you haven't clocked in 10 minutes after the shift starts, you and the admins get an email. Press **Clock out** if you leave early. Admins can turn the requirement off in Settings (*Supervisors must clock in*).
 
+## Students missing a machine
+The approval email tells students: if the machine you need isn't on the reserve page, reply to this email. Replies go to `REPLY_TO_EMAIL` (or the first `STAFF_NOTIFY_EMAIL`), so set one of them to a mailbox a supervisor reads. Then add the machine to the student's approval (Approvals > the approval) and the student can book it.
+
 ## Roles
 
 | Role | What they can do |

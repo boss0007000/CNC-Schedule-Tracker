@@ -355,3 +355,19 @@ def test_resubmission_keeps_earlier_cad_but_a_new_project_form_requires_it(clien
                     files=[pdf("v2.pdf")], follow_redirects=False)
     assert r.status_code == 303  # the STEP from revision 1 still counts
     assert 'required' in client.get("/submit").text.split('id="f_files"')[1][:160]
+
+
+def test_approval_email_explains_how_to_request_a_missing_machine(db, demo, monkeypatch):
+    from app import emailer
+    from app.models import Approval
+    from app.services import notify
+    monkeypatch.setenv("REPLY_TO_EMAIL", "lab@example.edu")
+    from app.config import get_config
+    get_config.cache_clear() if hasattr(get_config, "cache_clear") else None
+    a = db.scalar(select(Approval))
+    emailer.SENT.clear()
+    notify.project_approved(db, a)
+    emailer.flush_outbox(db)
+    mail = emailer.SENT[-1]
+    assert "reply to this email" in mail["text"] and a.number in mail["text"] and "MISSING A MACHINE" in mail["text"]
+    assert mail["reply_to"] == "lab@example.edu"

@@ -76,11 +76,20 @@ def project_submitted(db: Session, p: Project, revised: bool = False) -> None:
              f"Review it: {get_config().base_url}/admin/approvals/{p.id}", "projects.review")
 
 
+def reply_to_address() -> str | None:
+    c = get_config()
+    return (c.reply_to_email or (c.staff_notify_email.split(",")[0].strip() if c.staff_notify_email else "")) or None
+
+
 def project_approved(db: Session, a: Approval) -> None:
     emailer.queue(db, a.student.email, f"Project approved: {a.number}",
                   f"Hi {a.student.first_name},\n\nGreat news — “{a.project.title}” is approved.\n\n"
                   f"{approval_text(a)}\n\nYou will need this approval number to reserve machines at "
-                  f"{get_config().base_url}/reserve\nPrintable record: {approval_link(a)}\n\n— {_shop(db)}")
+                  f"{get_config().base_url}/reserve\nPrintable record: {approval_link(a)}\n\n"
+                  f"MISSING A MACHINE? When you open the reserve page you will only see the machines listed above that you are "
+                  f"allowed to book. If a machine you need isn't shown there, just reply to this email with the machine name "
+                  f"and the approval number {a.number}. A supervisor will review it and add the machine to your approval, "
+                  f"and you'll get an email when it's done.\n\n— {_shop(db)}", reply_to=reply_to_address())
 
 
 def project_rejected(db: Session, p: Project, reason: str) -> None:

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Student Guide: Gene Haas Advanced Manufacturing Lab</title>
+<style>
+  @page { size: Letter; margin: 0.5in; }
+  :root { --ink:#1b1f24; --muted:#5b6470; --accent:#8a1c1c; --line:#d9dde3; --bg:#f6f7f9; }
+  * { box-sizing: border-box; }
+  body { font: 13px/1.4 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--ink); margin: 0 auto; max-width: 8in; padding: 0.3in; }
+  header { border-bottom:3px solid var(--accent); padding-bottom:8px; margin-bottom:14px; }
+  h1 { font-size: 24px; margin:0; }
+  header p { margin:3px 0 0; color:var(--muted); font-size:13px; }
+  .steps { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+  .step { background:var(--bg); border:1px solid var(--line); border-radius:9px; padding:10px 12px; }
+  .step .t { font-weight:700; font-size:16px; }
+  .n { display:inline-block; width:24px; height:24px; line-height:24px; text-align:center; background:var(--accent); color:#fff; border-radius:50%; font-size:13px; margin-right:6px; }
+  .step ul { margin:6px 0 0; padding-left:18px; }
+  .step li { margin:3px 0; }
+  .row { display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px; }
+  .box { border-radius:9px; padding:10px 12px; border:1px solid var(--line); }
+  .box h2 { font-size:14px; margin:0 0 4px; }
+  .box p { margin:0; }
+  .warn { background:#fff6e5; border-color:#f0d49a; }
+  .key { background:#eef4ff; border-color:#c3d4f5; }
+  footer { margin-top:12px; color:var(--muted); font-size:12px; text-align:center; }
+  @media (max-width:640px) { .steps, .row { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Gene Haas Advanced Manufacturing Lab</h1>
+  <p>Student guide. No app or account needed: just your phone and campus email.</p>
+</header>
+
+<div class="steps">
+  <div class="step"><div class="t"><span class="n">1</span>Submit a project</div>
+    <ul>
+      <li>Describe your part.</li>
+      <li>Upload a CAD file (STEP, STL or DXF).</li>
+      <li>Staff review it and email you an <b>approval number</b>.</li>
+    </ul></div>
+  <div class="step"><div class="t"><span class="n">2</span>Reserve a machine</div>
+    <ul>
+      <li>Enter your approval number.</li>
+      <li>Pick machine, day (up to 14 days ahead) and hour slots.</li>
+      <li>Cancel at least 2 hours before the start.</li>
+    </ul></div>
+  <div class="step"><div class="t"><span class="n">3</span>Check in</div>
+    <ul>
+      <li>Scan the QR code on the machine.</li>
+      <li>Enter the <b>4-digit code on the TV</b>.</li>
+      <li>Wait for a supervisor to approve you.</li>
+    </ul></div>
+  <div class="step"><div class="t"><span class="n">4</span>Check out</div>
+    <ul>
+      <li>Tick the cleanup checklist.</li>
+      <li>Say if your tools or setup are staying in the machine.</li>
+      <li>Enter the TV code. Report any damage.</li>
+    </ul></div>
+</div>
+
+<div class="row">
+  <div class="box warn"><h2>Be on time</h2>
+    <p>Not checked in 15 minutes after your start = a <b>strike</b>. 3 strikes pause booking for 14 days. Strikes expire after 30 days.</p></div>
+  <div class="box"><h2>Leaving something in a machine?</h2>
+    <p>It shows <b>DO NOT TOUCH</b> for up to 1 day (tools) or 3 days (setup). Clear it out when done from My shop.</p></div>
+</div>
+
+<div class="row">
+  <div class="box"><h2>Need a slot that's taken?</h2>
+    <p>Join the waiting list, or open the schedule and tap <b>Ask for a different time</b>.</p></div>
+  <div class="box"><h2>Your account</h2>
+    <p>My shop shows your approvals, reservations and strikes. Sign-in is a 6-digit code emailed to you.</p></div>
+</div>
+
+<div class="box key" style="margin-top:10px"><h2>Problems?</h2>
+  <p>Phone dead, wrong code, or machine down: ask the supervisor on duty. In an emergency, stop all machines and follow staff instructions.</p></div>
+
+<footer>Safety first: never run a machine you aren't authorized on.</footer>
+
+</body>
+</html>

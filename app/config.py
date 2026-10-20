@@ -37,6 +37,7 @@ class Config(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     staff_notify_email: str = ""  # new-submission alerts
+    reply_to_email: str = ""  # replies to approval emails ("add a machine") land here; falls back to the first STAFF_NOTIFY_EMAIL
 
     scheduler_enabled: bool = True
     bootstrap_admin_username: str = ""  # create first admin on boot if no staff exist

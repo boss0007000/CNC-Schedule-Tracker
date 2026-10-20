@@ -13,6 +13,7 @@
   <label for="mc">Machine</label>
   <select id="mc" name="machine" required><option value="">Choose…</option>
     {% for m in machines %}<option value="{{ m.id }}" {% if machine_id == m.id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select>
+  <p class="help">Don't see a machine you need? Reply to your approval email with the machine name and a supervisor will add it to your approval.</p>
   <label for="dt">Date</label>
   <input id="dt" name="date" type="date" value="{{ day }}" min="{{ today }}" max="{{ last_day }}" required>
   <p class="help">You can book up to {{ cfg.max_advance_days }} days ahead.</p>

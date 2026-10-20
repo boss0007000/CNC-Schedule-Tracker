@@ -20,42 +20,46 @@ class EmailError(Exception):
     pass
 
 
-def _send_console(to, subject, text, html):
+def _send_console(to, subject, text, html, reply_to=None):
     log.info("EMAIL to=%s subject=%s\n%s", to, subject, text)
     print(f"\n--- EMAIL to={to} subject={subject}\n{text}\n---", flush=True)
 
 
-def _send_memory(to, subject, text, html):
-    SENT.append({"to": to, "subject": subject, "text": text, "html": html})
+def _send_memory(to, subject, text, html, reply_to=None):
+    SENT.append({"to": to, "subject": subject, "text": text, "html": html, "reply_to": reply_to})
 
 
-def _send_brevo(to, subject, text, html):
+def _send_brevo(to, subject, text, html, reply_to=None):
     c = get_config()
     r = httpx.post("https://api.brevo.com/v3/smtp/email", timeout=15,
                    headers={"api-key": c.brevo_api_key, "accept": "application/json"},
                    json={"sender": {"name": c.email_from_name, "email": c.email_from},
                          "to": [{"email": to}], "subject": subject,
-                         "textContent": text, **({"htmlContent": html} if html else {})})
+                         "textContent": text, **({"htmlContent": html} if html else {}),
+                         **({"replyTo": {"email": reply_to}} if reply_to else {})})
     if r.status_code >= 300:
         raise EmailError(f"brevo {r.status_code}: {r.text[:200]}")
 
 
-def _send_resend(to, subject, text, html):
+def _send_resend(to, subject, text, html, reply_to=None):
     c = get_config()
     r = httpx.post("https://api.resend.com/emails", timeout=15,
                    headers={"Authorization": f"Bearer {c.resend_api_key}"},
                    json={"from": f"{c.email_from_name} <{c.email_from}>", "to": [to],
-                         "subject": subject, "text": text, **({"html": html} if html else {})})
+                         "subject": subject, "text": text, **({"html": html} if html else {}),
+                         **({"reply_to": reply_to} if reply_to else {})})
     if r.status_code >= 300:
         raise EmailError(f"resend {r.status_code}: {r.text[:200]}")
 
 
-def _send_smtp(to, subject, text, html):
+def _send_smtp(to, subject, text, html, reply_to=None):
     c = get_config()
     msg = EmailMessage()
     msg["From"] = f"{c.email_from_name} <{c.email_from}>"
     msg["To"] = to
     msg["Subject"] = subject
+    if reply_to:
+        msg["Reply-To"] = reply_to
     msg.set_content(text)
     if html:
         msg.add_alternative(html, subtype="html")
@@ -70,8 +74,8 @@ PROVIDERS = {"console": _send_console, "memory": _send_memory, "brevo": _send_br
              "resend": _send_resend, "smtp": _send_smtp}
 
 
-def queue(db: Session, to: str, subject: str, text: str, html: str | None = None) -> EmailOutbox:
-    row = EmailOutbox(to_email=to, subject=subject, body_text=text, body_html=html)
+def queue(db: Session, to: str, subject: str, text: str, html: str | None = None, reply_to: str | None = None) -> EmailOutbox:
+    row = EmailOutbox(to_email=to, subject=subject, body_text=text, body_html=html, reply_to=reply_to)
     db.add(row)
     db.flush()
     return row
@@ -90,7 +94,7 @@ def flush_outbox(db: Session, limit: int = 50) -> int:
     for row in rows:
         row.attempts += 1
         try:
-            provider(row.to_email, row.subject, row.body_text, row.body_html)
+            provider(row.to_email, row.subject, row.body_text, row.body_html, row.reply_to)
             row.status, row.sent_at, row.last_error = "sent", clock.now(), None
             if row.subject.startswith(SECRET_SUBJECT_PREFIX):  # don't keep temporary passwords in the database
                 row.body_text, row.body_html = "(removed after sending)", None
